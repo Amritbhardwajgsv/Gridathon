@@ -1,0 +1,327 @@
+import json
+from pathlib import Path
+from typing import Any
+
+import joblib
+import pandas as pd
+
+from app.schemas import (
+    ImpactPredictionRequest,
+    ImpactPredictionResponse,
+    LearningSignal,
+    NlpSignal,
+    ResourceRecommendation,
+)
+
+IMPACT_MULTIPLIER = {
+    "Low": 1.0,
+    "Medium": 1.45,
+    "High": 2.2,
+    "Critical": 3.1,
+}
+
+OPERATIONAL_FEATURES = [
+    "event_cause_grouped",
+    "event_type",
+    "priority",
+    "requires_road_closure",
+    "corridor",
+    "zone",
+    "latitude",
+    "longitude",
+    "hour",
+    "day_of_week",
+    "month",
+    "predicted_duration_minutes",
+    "impact_level",
+    "urgency_score",
+    "risk_count",
+    "estimated_crowd_size",
+]
+
+RESOURCE_TARGETS = [
+    "personnel_total",
+    "constables",
+    "asi",
+    "si",
+    "inspectors",
+    "barricades",
+    "tow_units",
+    "medical_units",
+    "diversion_confidence",
+]
+
+
+class ResourceRecommendationService:
+    def __init__(self, models_dir: Path | None = None) -> None:
+        self.models_dir = models_dir or Path(__file__).resolve().parents[1] / "models"
+        self.resource_model: Any | None = None
+        self.learning_model: Any | None = None
+        self.resource_feature_columns: list[str] = OPERATIONAL_FEATURES
+        self.learning_feature_columns: list[str] = OPERATIONAL_FEATURES
+        self.resource_target_columns: list[str] = RESOURCE_TARGETS
+        self.metrics: dict[str, Any] = {}
+
+    @property
+    def is_ready(self) -> bool:
+        return self.resource_model is not None and self.learning_model is not None
+
+    def load_models(self) -> None:
+        try:
+            self.resource_model = joblib.load(
+                self.models_dir / "resource_deployment_model.pkl"
+            )
+            self.learning_model = joblib.load(
+                self.models_dir / "learning_priority_model.pkl"
+            )
+            self.resource_feature_columns = self._load_json(
+                "resource_deployment_feature_columns.json",
+                OPERATIONAL_FEATURES,
+            )
+            self.learning_feature_columns = self._load_json(
+                "learning_priority_feature_columns.json",
+                OPERATIONAL_FEATURES,
+            )
+            self.resource_target_columns = self._load_json(
+                "resource_deployment_target_columns.json",
+                RESOURCE_TARGETS,
+            )
+            metrics_path = self.models_dir / "operational_model_metrics.json"
+            if metrics_path.exists():
+                self.metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
+        except Exception:
+            self.resource_model = None
+            self.learning_model = None
+
+    def build(
+        self,
+        payload: ImpactPredictionRequest,
+        base_prediction: ImpactPredictionResponse,
+        nlp_signal: NlpSignal,
+    ) -> tuple[ResourceRecommendation, LearningSignal]:
+        if self.is_ready:
+            return self._model_build(payload, base_prediction, nlp_signal)
+        return self._policy_build(payload, base_prediction, nlp_signal)
+
+    def _model_build(
+        self,
+        payload: ImpactPredictionRequest,
+        base_prediction: ImpactPredictionResponse,
+        nlp_signal: NlpSignal,
+    ) -> tuple[ResourceRecommendation, LearningSignal]:
+        try:
+            feature_frame = self._build_feature_frame(
+                payload,
+                base_prediction,
+                nlp_signal,
+                self.resource_feature_columns,
+            )
+            resource_pred = self.resource_model.predict(feature_frame)[0]
+            resource_values = dict(zip(self.resource_target_columns, resource_pred))
+
+            learning_frame = self._build_feature_frame(
+                payload,
+                base_prediction,
+                nlp_signal,
+                self.learning_feature_columns,
+            )
+            retraining_priority = str(self.learning_model.predict(learning_frame)[0])
+
+            recommendation = ResourceRecommendation(
+                personnel_total=self._bounded_int(resource_values["personnel_total"], 10, 220),
+                constables=self._bounded_int(resource_values["constables"], 6, 210),
+                asi=self._bounded_int(resource_values["asi"], 2, 40),
+                si=self._bounded_int(resource_values["si"], 1, 15),
+                inspectors=self._bounded_int(resource_values["inspectors"], 1, 8),
+                barricades=self._bounded_int(resource_values["barricades"], 6, 120),
+                tow_units=self._bounded_int(resource_values["tow_units"], 0, 6),
+                medical_units=self._bounded_int(resource_values["medical_units"], 0, 4),
+                diversion_confidence=round(
+                    max(0.35, min(float(resource_values["diversion_confidence"]), 0.9)),
+                    2,
+                ),
+                primary_action=self._primary_action(payload, base_prediction, nlp_signal),
+                deployment_notes=[
+                    "Resource deployment generated by trained operational model.",
+                    *self._deployment_notes(payload, base_prediction, nlp_signal),
+                ],
+            )
+            learning_signal = self._learning_signal(retraining_priority)
+            learning_signal.learning_notes = [
+                "Learning priority generated by trained post-event model.",
+                *learning_signal.learning_notes,
+            ]
+            return recommendation, learning_signal
+        except Exception:
+            return self._policy_build(payload, base_prediction, nlp_signal)
+
+    def _policy_build(
+        self,
+        payload: ImpactPredictionRequest,
+        base_prediction: ImpactPredictionResponse,
+        nlp_signal: NlpSignal,
+    ) -> tuple[ResourceRecommendation, LearningSignal]:
+        impact_multiplier = IMPACT_MULTIPLIER.get(base_prediction.impact_level, 1.4)
+        duration_hours = max(1.0, base_prediction.predicted_duration_minutes / 60)
+        crowd_factor = self._crowd_factor(payload.estimated_crowd_size)
+        closure_factor = 1.35 if payload.requires_road_closure else 1.0
+        urgency_factor = 1 + (nlp_signal.urgency_score / 250)
+
+        base_personnel = 8 * duration_hours * impact_multiplier
+        total = round(base_personnel * crowd_factor * closure_factor * urgency_factor)
+        total = max(10, min(total, 220))
+
+        inspectors = max(1, round(total / 80))
+        si = max(1, round(total / 35))
+        asi = max(2, round(total / 12))
+        constables = max(6, total - inspectors - si - asi)
+        barricades = max(6, round(total * (0.45 if payload.requires_road_closure else 0.25)))
+        tow_units = 1 if "accident" in nlp_signal.keywords or "blockage" in nlp_signal.detected_risks else 0
+        medical_units = 1 if "safety" in nlp_signal.detected_risks or base_prediction.impact_level == "Critical" else 0
+        diversion_confidence = max(
+            0.35,
+            min(0.86, 0.82 - (0.12 if payload.requires_road_closure else 0) - (nlp_signal.urgency_score / 500)),
+        )
+
+        recommendation = ResourceRecommendation(
+            personnel_total=total,
+            constables=constables,
+            asi=asi,
+            si=si,
+            inspectors=inspectors,
+            barricades=barricades,
+            tow_units=tow_units,
+            medical_units=medical_units,
+            diversion_confidence=round(diversion_confidence, 2),
+            primary_action=self._primary_action(payload, base_prediction, nlp_signal),
+            deployment_notes=self._deployment_notes(payload, base_prediction, nlp_signal),
+        )
+
+        learning_signal = self._learning_signal(
+            self._retraining_priority(base_prediction, nlp_signal)
+        )
+        return recommendation, learning_signal
+
+    @staticmethod
+    def _crowd_factor(crowd_size: int | None) -> float:
+        if not crowd_size:
+            return 1.0
+        if crowd_size >= 100000:
+            return 2.0
+        if crowd_size >= 50000:
+            return 1.6
+        if crowd_size >= 15000:
+            return 1.25
+        return 1.05
+
+    @staticmethod
+    def _primary_action(
+        payload: ImpactPredictionRequest,
+        prediction: ImpactPredictionResponse,
+        nlp_signal: NlpSignal,
+    ) -> str:
+        if prediction.impact_level == "Critical" or nlp_signal.urgency_score >= 90:
+            return "Escalate to control room, dispatch senior field officer, and activate diversion broadcast."
+        if payload.requires_road_closure:
+            return "Prepare barricading plan and deploy personnel to choke approach before crowd arrival."
+        if prediction.impact_level == "High":
+            return "Pre-position traffic staff and keep parallel corridor diversion ready."
+        return "Monitor corridor and keep station-level deployment on standby."
+
+    @staticmethod
+    def _deployment_notes(
+        payload: ImpactPredictionRequest,
+        prediction: ImpactPredictionResponse,
+        nlp_signal: NlpSignal,
+    ) -> list[str]:
+        notes = [
+            f"Focus first deployment on {payload.corridor} in {payload.zone}.",
+            f"Predicted clearance window is {prediction.predicted_duration_minutes} minutes.",
+        ]
+        if payload.requires_road_closure:
+            notes.append("Road closure flag is active; barricading must be checked against overlapping events.")
+        if nlp_signal.detected_risks:
+            notes.append(f"NLP risks detected: {', '.join(nlp_signal.detected_risks)}.")
+        if payload.estimated_crowd_size:
+            notes.append(f"Estimated crowd size supplied: {payload.estimated_crowd_size}.")
+        return notes
+
+    @staticmethod
+    def _retraining_priority(
+        prediction: ImpactPredictionResponse,
+        nlp_signal: NlpSignal,
+    ) -> str:
+        if prediction.impact_level == "Critical" or nlp_signal.urgency_score >= 90:
+            return "high"
+        if prediction.impact_level == "High" or nlp_signal.urgency_score >= 70:
+            return "medium"
+        return "standard"
+
+    @staticmethod
+    def _learning_signal(retraining_priority: str) -> LearningSignal:
+        return LearningSignal(
+            feedback_required=True,
+            retraining_priority=retraining_priority,
+            expected_ground_truth_fields=[
+                "actual_duration_minutes",
+                "actual_impact_level",
+                "resolved_at",
+                "feedback_diversion_worked",
+                "feedback_personnel_adequate",
+                "feedback_dispersal_slower_than_predicted",
+                "compliance_delta_meters",
+                "resolution_drift_minutes",
+            ],
+            post_event_questions=[
+                "Did the suggested diversion route work as expected?",
+                "Was the personnel count adequate for the event?",
+                "Was dispersal slower than predicted?",
+            ],
+            learning_notes=[
+                "Compare predicted clearance window with resolved_at timestamp.",
+                "Use officer override notes as training signal, not audit friction.",
+                "Feed citizen complaint density into next weekly retraining run.",
+            ],
+        )
+
+    @staticmethod
+    def _bounded_int(value: float, minimum: int, maximum: int) -> int:
+        return max(minimum, min(int(round(float(value))), maximum))
+
+    @staticmethod
+    def _load_json(filename: str, fallback: list[str]) -> list[str]:
+        path = Path(__file__).resolve().parents[1] / "models" / filename
+        if not path.exists():
+            return fallback
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+        return loaded if isinstance(loaded, list) else fallback
+
+    @staticmethod
+    def _build_feature_frame(
+        payload: ImpactPredictionRequest,
+        prediction: ImpactPredictionResponse,
+        nlp_signal: NlpSignal,
+        columns: list[str],
+    ) -> pd.DataFrame:
+        data = {
+            "event_cause_grouped": payload.event_cause_grouped,
+            "event_type": payload.event_type,
+            "priority": payload.priority,
+            "requires_road_closure": str(payload.requires_road_closure),
+            "corridor": payload.corridor,
+            "zone": payload.zone,
+            "latitude": payload.latitude,
+            "longitude": payload.longitude,
+            "hour": payload.hour,
+            "day_of_week": payload.day_of_week,
+            "month": payload.month,
+            "predicted_duration_minutes": prediction.predicted_duration_minutes,
+            "impact_level": prediction.impact_level,
+            "urgency_score": nlp_signal.urgency_score,
+            "risk_count": len(nlp_signal.detected_risks),
+            "estimated_crowd_size": payload.estimated_crowd_size or 0,
+        }
+        return pd.DataFrame([{column: data[column] for column in columns}])
+
+
+resource_recommendation_service = ResourceRecommendationService()
