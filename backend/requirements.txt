@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+pandas
+numpy
+scikit-learn==1.6.1
+joblib
+psycopg[binary]
+PyJWT
+bcrypt
+requests
+langchain-core
+redis

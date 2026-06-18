@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <defs>
+    <radialGradient id="radarBg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#22d3ee" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="100" cy="100" r="90" stroke="#22d3ee" stroke-width="0.5" opacity="0.2"/>
+  <circle cx="100" cy="100" r="65" stroke="#22d3ee" stroke-width="0.5" opacity="0.2"/>
+  <circle cx="100" cy="100" r="40" stroke="#22d3ee" stroke-width="0.5" opacity="0.2"/>
+  <circle cx="100" cy="100" r="15" stroke="#22d3ee" stroke-width="0.5" opacity="0.3"/>
+
+  <line x1="100" y1="10" x2="100" y2="190" stroke="#22d3ee" stroke-width="0.4" opacity="0.15"/>
+  <line x1="10" y1="100" x2="190" y2="100" stroke="#22d3ee" stroke-width="0.4" opacity="0.15"/>
+  <line x1="36" y1="36" x2="164" y2="164" stroke="#22d3ee" stroke-width="0.4" opacity="0.1"/>
+  <line x1="164" y1="36" x2="36" y2="164" stroke="#22d3ee" stroke-width="0.4" opacity="0.1"/>
+
+  <circle cx="100" cy="100" r="90" fill="url(#radarBg)"/>
+
+  <!-- Sweep arm -->
+  <line x1="100" y1="100" x2="190" y2="100" stroke="#22d3ee" stroke-width="1.5" opacity="0.8">
+    <animateTransform attributeName="transform" type="rotate" from="0 100 100" to="360 100 100" dur="4s" repeatCount="indefinite"/>
+  </line>
+
+  <!-- Blips -->
+  <circle cx="145" cy="68" r="2.5" fill="#ef4444" opacity="0.9"/>
+  <circle cx="72" cy="130" r="2" fill="#10b981" opacity="0.8"/>
+  <circle cx="155" cy="120" r="1.8" fill="#f59e0b" opacity="0.7"/>
+  <circle cx="100" cy="100" r="3" fill="#22d3ee" opacity="1"/>
+</svg>

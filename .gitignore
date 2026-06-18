@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+
+__pycache__/
+*.py[cod]
+
+.env
+.env*.local
+
+next-dev.out.log
+next-dev.err.log
