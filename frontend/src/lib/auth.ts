@@ -9,7 +9,6 @@ import type {
   UserRole
 } from "@/types/prediction";
 
-const TOKEN_STORAGE_KEY = "drishti_access_token";
 const USER_STORAGE_KEY = "drishti_user";
 const HISTORY_STORAGE_KEY = "prediction_history";
 
@@ -17,14 +16,6 @@ const isBrowser = typeof window !== "undefined";
 
 export function getDashboardForRole(role: UserRole): string {
   return roleConfig[role].dashboardPath;
-}
-
-export function getAccessToken(): string | null {
-  if (!isBrowser) {
-    return null;
-  }
-
-  return window.localStorage.getItem(TOKEN_STORAGE_KEY);
 }
 
 export function getCurrentUser(): AuthUser | null {
@@ -46,6 +37,8 @@ export function getCurrentUser(): AuthUser | null {
 }
 
 export async function loginUser(payload: LoginPayload): Promise<AuthUser> {
+  // Backend sets the HttpOnly auth cookie; we only keep the user snapshot locally
+  // for display purposes (name, role, email — nothing sensitive).
   const response = await api.post<TokenResponse>("/auth/login", payload);
   storeSession(response.data);
   return response.data.user;
@@ -63,11 +56,7 @@ export async function fetchCurrentUser(): Promise<AuthUser> {
 }
 
 export async function validateSession(): Promise<AuthUser | null> {
-  if (!getAccessToken()) {
-    clearSession();
-    return null;
-  }
-
+  // No localStorage token check needed — the HttpOnly cookie is sent automatically.
   try {
     return await fetchCurrentUser();
   } catch {
@@ -77,22 +66,18 @@ export async function validateSession(): Promise<AuthUser | null> {
 }
 
 export async function logoutUser(): Promise<void> {
-  // Tell the backend to blacklist the JWT in Redis first.
-  // Fire-and-forget: even if the request fails the local session is cleared.
   try {
-    const token = getAccessToken();
-    if (token) {
-      await api.post("/auth/logout");
-    }
+    await api.post("/auth/logout");
   } catch {
-    // network error or already-expired token — clear locally regardless
+    // Network error or expired cookie — clear locally regardless
   } finally {
     clearSession();
   }
 }
 
 function storeSession(response: TokenResponse): void {
-  window.localStorage.setItem(TOKEN_STORAGE_KEY, response.access_token);
+  // Token goes into the HttpOnly cookie set by the server.
+  // Only store the non-sensitive user profile for UI display.
   window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(response.user));
 }
 
@@ -101,7 +86,6 @@ function clearSession(): void {
     return;
   }
 
-  window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   window.localStorage.removeItem(USER_STORAGE_KEY);
 }
 

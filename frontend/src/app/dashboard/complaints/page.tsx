@@ -13,9 +13,15 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import PredictionForm from "@/components/PredictionForm";
-import PredictionResultCard from "@/components/PredictionResultCard";
+import dynamic from "next/dynamic";
 import ProgressBar from "@/components/ProgressBar";
+
+const PredictionForm = dynamic(() => import("@/components/PredictionForm"), {
+  loading: () => <div className="flex h-48 items-center justify-center text-[12px] text-[#3d5278]"><Loader2 className="h-4 w-4 animate-spin text-[#22d3ee] mr-2" />Loading form…</div>,
+});
+const PredictionResultCard = dynamic(() => import("@/components/PredictionResultCard"), {
+  loading: () => <div className="flex h-32 items-center justify-center text-[12px] text-[#3d5278]"><Loader2 className="h-4 w-4 animate-spin text-[#22d3ee] mr-2" />Loading result…</div>,
+});
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { listCitizenGrievances, updateGrievanceStatus } from "@/lib/api";
 import { modelCorridors, modelZones } from "@/lib/bengaluru";

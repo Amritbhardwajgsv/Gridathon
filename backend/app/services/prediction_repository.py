@@ -2,6 +2,7 @@ import json
 from typing import Any
 
 from app.core.config import get_database_url
+from app.services.cache import cache, OPS_SUMMARY, LOGS_LIST
 from app.schemas import (
     ImpactPredictionRequest,
     ImpactPredictionResponse,
@@ -163,6 +164,7 @@ class PredictionRepository:
                     )
         except Exception:
             return
+        cache.delete(OPS_SUMMARY)
 
     def operations_summary(self) -> OperationsSummaryResponse:
         empty = OperationsSummaryResponse(
@@ -175,6 +177,16 @@ class PredictionRepository:
         )
         if not self.database_url:
             return empty
+
+        cached = cache.get(OPS_SUMMARY)
+        if cached is not None:
+            try:
+                return OperationsSummaryResponse(**{
+                    **cached,
+                    "recent_predictions": [RecentPredictionResponse(**p) for p in cached.get("recent_predictions", [])],
+                })
+            except Exception:
+                pass
 
         try:
             import psycopg
@@ -250,7 +262,7 @@ class PredictionRepository:
                         for row in cursor.fetchall()
                     ]
 
-            return OperationsSummaryResponse(
+            result = OperationsSummaryResponse(
                 prediction_count=prediction_count,
                 grievance_count=grievance_count,
                 retraining_ready_count=retraining_ready_count,
@@ -258,12 +270,18 @@ class PredictionRepository:
                 severity_counts=severity_counts,
                 recent_predictions=recent_predictions,
             )
+            cache.set(OPS_SUMMARY, result.model_dump(), ttl=30)
+            return result
         except Exception:
             return empty
 
     def system_logs(self, limit: int = 200) -> list[SystemLogResponse]:
         if not self.database_url:
             return []
+
+        cached = cache.get(LOGS_LIST)
+        if cached is not None:
+            return [SystemLogResponse(**item) for item in cached]
 
         try:
             import psycopg
@@ -281,7 +299,10 @@ class PredictionRepository:
                         """,
                         (max(1, min(limit, 500)),),
                     )
-                    return [SystemLogResponse(**row) for row in cursor.fetchall()]
+                    rows = cursor.fetchall()
+
+            cache.set(LOGS_LIST, [dict(r) for r in rows], ttl=60)
+            return [SystemLogResponse(**row) for row in rows]
         except Exception:
             return []
 

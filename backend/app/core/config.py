@@ -70,6 +70,17 @@ def get_mapmyindia_geocode_url() -> str:
     )
 
 
+def get_kafka_bootstrap_servers() -> list[str] | None:
+    load_env_file()
+    raw = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "").strip()
+    return [s.strip() for s in raw.split(",") if s.strip()] if raw else None
+
+
+def get_cookie_secure() -> bool:
+    load_env_file()
+    return os.getenv("COOKIE_SECURE", "true").lower() != "false"
+
+
 def get_smtp_config() -> dict:
     load_env_file()
     user = os.getenv("SMTP_USER")
