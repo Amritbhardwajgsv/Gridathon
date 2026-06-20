@@ -6,7 +6,7 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -193,27 +193,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 # App setup
 # ---------------------------------------------------------------------------
 
-def _warm_predictor() -> None:
-    """Load the SentenceTransformer + XGBoost models in a background thread so
-    the first grievance request doesn't block waiting for a 20-50s model load."""
-    try:
-        import app.services.incident_predictor as _p
-        _p._ensure_loaded()
-        logger.info("Predictor models warm (embedder + XGBoost ready)")
-    except Exception as exc:
-        logger.warning("Predictor warm-up failed (non-fatal): %s", exc)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    import threading
     from app.core.config import get_database_url
     db_url = get_database_url()
     event_queue.init(db_url)
     event_queue.start()
     event_queue.replay_pending()
-    threading.Thread(target=_warm_predictor, daemon=True, name="predictor-warmup").start()
-    logger.info("DRISHTI backend starting — predictor warming in background, event queue ready")
+    logger.info("DRISHTI backend starting — event queue ready (models load on first use)")
     yield
     event_queue.stop()
     logger.info("DRISHTI backend shutdown")
@@ -634,9 +621,19 @@ def officer_file_grievance(
 )
 def create_citizen_grievance(
     request: CitizenGrievanceCreateRequest,
+    background_tasks: BackgroundTasks,
 ) -> CitizenGrievanceResponse:
     try:
-        return grievance_repository.create(request)
+        result = grievance_repository.create(request)
+        # Gemini validation runs after the response is sent — citizen gets their
+        # tracking ID instantly; Gemini marks the record if it fails.
+        if request.description and len(request.description.strip()) >= 10:
+            background_tasks.add_task(
+                grievance_repository.validate_async,
+                result.tracking_id,
+                request.description,
+            )
+        return result
     except GrievanceRejectedError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
