@@ -52,6 +52,11 @@ def get_redis_url() -> str | None:
     return os.getenv("REDIS_URL")
 
 
+def get_gemini_api_key() -> str | None:
+    load_env_file()
+    return os.getenv("GEMINI_API_KEY")
+
+
 def get_mapmyindia_api_key() -> str | None:
     load_env_file()
     return os.getenv("MAPMYINDIA_API_KEY")

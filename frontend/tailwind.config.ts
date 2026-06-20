@@ -9,28 +9,46 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
+        grotesk: ["var(--font-grotesk)", "Space Grotesk", "sans-serif"],
+        mono: ["var(--font-mono)", "Space Mono", "monospace"],
         roboto: ["var(--font-roboto)", "Roboto", "sans-serif"],
       },
       colors: {
-        ink: {
-          DEFAULT: "#172126",
-          950: "#0E1117",
-          900: "#172126",
-          700: "#1E2535",
-          500: "#3A4358",
-          300: "#7A8499",
-          100: "#C8CDD9",
-          50: "#EEF0F5"
+        yellow: { DEFAULT: "#FFE600", dim: "rgba(255,230,0,0.10)" },
+        coral:  { DEFAULT: "#E84B5A", dim: "rgba(232,75,90,0.12)"  },
+        dusk:   {
+          DEFAULT: "#08080F",
+          50:      "#F0F0F8",
+          100:     "#D0D0E8",
+          200:     "#8888A0",
+          300:     "#444455",
+          400:     "#252535",
+          500:     "#1E1E2E",
+          600:     "#161625",
+          700:     "#0F0F1A",
+          800:     "#08080F",
         },
-        mist: "#F6F7F9",
-        line: "#DDE1EA",
-        pine: "#0F7B6C",
-        signal: "#E8531A",
-        amber: "#C47D0A"
+        /* Legacy ink colours for backward compat */
+        ink: {
+          DEFAULT: "#0F0F1A",
+          950: "#08080F",
+          900: "#0F0F1A",
+          700: "#161625",
+          500: "#333348",
+          300: "#8888A0",
+          100: "#D0D0E8",
+          50:  "#F0F0F8"
+        },
+        mist:   "#F0F0F8",
+        line:   "#252535",
+        pine:   "#10B981",
+        signal: "#E84B5A",
+        amber:  "#F59E0B"
       },
       boxShadow: {
-        soft: "0 1px 3px rgba(14,17,23,0.08), 0 0 0 1px rgba(14,17,23,0.06)",
-        elevated: "0 4px 16px rgba(14,17,23,0.12), 0 0 0 1px rgba(14,17,23,0.06)"
+        soft:     "0 1px 3px rgba(8,8,15,0.4), 0 0 0 2px rgba(37,37,53,0.6)",
+        elevated: "0 4px 16px rgba(8,8,15,0.5), 0 0 0 2px rgba(37,37,53,0.6)",
+        yellow:   "0 0 20px rgba(255,230,0,0.22)",
       }
     }
   },

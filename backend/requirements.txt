@@ -3,10 +3,13 @@ uvicorn[standard]
 pandas
 numpy
 scikit-learn==1.6.1
+xgboost
+sentence-transformers
 joblib
 psycopg[binary]
 PyJWT
 bcrypt
 requests
 langchain-core
+google-genai
 redis

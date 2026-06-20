@@ -125,6 +125,15 @@ export interface OperationsSummary {
   recent_predictions: RecentPrediction[];
 }
 
+export interface SystemLog {
+  id: string;
+  aggregate_type: string;
+  aggregate_key: string;
+  event_type: string;
+  event_payload: Record<string, unknown>;
+  created_at: string;
+}
+
 export type GrievanceType =
   | "event_congestion"
   | "illegal_parking"
@@ -239,6 +248,38 @@ export interface DeploymentOrderPayload {
   required_personnel_count?: number;
   field_brief: string;
   status?: "draft" | "issued";
+}
+
+// ─── Incident prediction (ML pipeline + LLM firewall) ────────────────────────
+
+export interface IncidentPredictionPayload {
+  description:            string;
+  latitude:               number;
+  longitude:              number;
+  requires_road_closure?: boolean;
+  event_cause?:           string;
+  veh_type?:              string;
+  corridor?:              string;
+  police_station?:        string;
+  zone?:                  string;
+}
+
+export interface IncidentFirewallResult {
+  passed:        boolean;
+  reason:        string;
+  incident_type: string | null;
+}
+
+export interface IncidentPredictionResponse {
+  status:                  "OK" | "REJECTED";
+  firewall:                IncidentFirewallResult;
+  estimated_duration_min?: number | null;
+  estimated_duration_hrs?: number | null;
+  priority?:               string | null;
+  personnel_to_deploy?:    number | null;
+  urgency?:                string | null;
+  detected_cause?:         string | null;
+  detected_veh_type?:      string | null;
 }
 
 export interface DeploymentOrder {

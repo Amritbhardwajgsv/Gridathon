@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { Search } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import type { MaplsMap, MaplsMarker } from "@/types/mappls";
 import type { CitizenGrievance, PolicePersonnel } from "@/types/prediction";
@@ -9,6 +10,14 @@ import type { CitizenGrievance, PolicePersonnel } from "@/types/prediction";
 
 const MAPPLS_KEY = process.env.NEXT_PUBLIC_MAPPLS_KEY ?? "";
 const BLR = { lat: 12.9716, lng: 77.5946 }; // Bengaluru, Karnataka
+
+function point(latValue: number | null | undefined, lngValue: number | null | undefined) {
+  const lat = Number(latValue);
+  const lng = Number(lngValue);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return { lat, lng };
+}
 
 const SEV_COLOR: Record<string, string> = {
   Critical: "#ef4444",
@@ -53,6 +62,20 @@ export default function PersonnelMap({
 
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [officerQuery, setOfficerQuery] = useState("");
+  const [selectedPersonnelId, setSelectedPersonnelId] = useState<string | null>(null);
+
+  const locatedPersonnel = useMemo(
+    () => personnel.filter((p) => point(p.current_latitude, p.current_longitude)),
+    [personnel],
+  );
+  const officerMatches = useMemo(() => {
+    const query = officerQuery.trim().toLowerCase();
+    if (!query) return [];
+    return locatedPersonnel.filter((p) =>
+      p.name.toLowerCase().includes(query) || p.badge_id.toLowerCase().includes(query)
+    ).slice(0, 6);
+  }, [locatedPersonnel, officerQuery]);
 
   // Mirror latest props into a ref so marker draws always use fresh data
   // without triggering the one-time init effect
@@ -71,13 +94,14 @@ export default function PersonnelMap({
     const { personnel: pp, complaints: cc } = dataRef.current;
 
     for (const p of pp) {
-      if (!p.current_latitude || !p.current_longitude) continue;
+      const location = point(p.current_latitude, p.current_longitude);
+      if (!location) continue;
       const avail = !!p.is_available;
       try {
         markersRef.current.push(new window.mappls!.Marker({
           map,
-          position:  { lat: p.current_latitude, lng: p.current_longitude },
-          icon:      { url: avail ? ICON.available : ICON.onDuty, size: [20, 20], anchor: [10, 10] },
+          position:  location,
+          icon:      { url: avail ? ICON.available : ICON.onDuty, size: [28, 28], anchor: [14, 14] },
           fitbounds: false,
           popupHtml: `<div style="font:12px monospace;line-height:1.6">
             <b style="color:#0d1629">${p.badge_id} — ${p.name}</b><br/>
@@ -85,18 +109,29 @@ export default function PersonnelMap({
             <br/><span style="color:${avail ? "#22d3ee" : "#3b82f6"};font-weight:600">
               ${avail ? "● Available" : "● On Duty"}</span></div>`,
         }) as MaplsMarker);
-      } catch { /* skip bad marker */ }
+      } catch {
+        // Some SDK builds reject custom icon objects; retain the location with a default marker.
+        try {
+          markersRef.current.push(new window.mappls!.Marker({
+            map,
+            position: location,
+            fitbounds: false,
+            popupHtml: `<b>${p.badge_id} — ${p.name}</b><br/>${p.rank} · ${p.unit_name}`,
+          }) as MaplsMarker);
+        } catch { /* skip only genuinely invalid markers */ }
+      }
     }
 
     for (const c of cc) {
-      if (!c.latitude || !c.longitude) continue;
+      const location = point(c.latitude, c.longitude);
+      if (!location) continue;
       const sev  = c.severity ?? "Medium";
       const col  = SEV_COLOR[sev] ?? "#3b82f6";
       const icon = (ICON as Record<string, string>)[sev] ?? ICON.Medium;
       try {
         markersRef.current.push(new window.mappls!.Marker({
           map,
-          position:  { lat: c.latitude, lng: c.longitude },
+          position:  location,
           icon:      { url: icon, size: [22, 22], anchor: [11, 11] },
           fitbounds: false,
           popupHtml: `<div style="font:12px monospace;line-height:1.6">
@@ -108,6 +143,24 @@ export default function PersonnelMap({
         }) as MaplsMarker);
       } catch { /* skip bad marker */ }
     }
+
+    const selected = pp.find((p) => p.id === selectedPersonnelId);
+    if (selected) focusOfficer(map, selected);
+  }
+
+  function focusOfficer(map: MaplsMap, officer: PolicePersonnel) {
+    const location = point(officer.current_latitude, officer.current_longitude);
+    if (!location) return;
+    window.setTimeout(() => {
+      map.setCenter?.([location.lat, location.lng]);
+      map.setZoom?.(16);
+    }, 100);
+  }
+
+  function selectOfficer(officer: PolicePersonnel) {
+    setSelectedPersonnelId(officer.id);
+    setOfficerQuery(`${officer.name} · ${officer.badge_id}`);
+    if (mapRef.current) focusOfficer(mapRef.current, officer);
   }
 
   // ── One-time SDK init ──────────────────────────────────────────────────────
@@ -132,7 +185,7 @@ export default function PersonnelMap({
       }
       try {
         const map = new window.mappls.Map(containerId, {
-          center: { lat: BLR.lat, lng: BLR.lng },
+          center: [BLR.lat, BLR.lng],
           zoom:   12,
         });
         mapRef.current = map;
@@ -189,6 +242,50 @@ export default function PersonnelMap({
     <div className="relative h-full min-h-[288px] w-full">
       {/* SDK-managed map surface — always present */}
       <div className="h-full w-full" id={containerId} />
+
+      {ready && (
+        <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-full border border-[#f2c9b6] bg-white/95 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-[#795b4e] shadow-sm">
+          {locatedPersonnel.length} live officer location{locatedPersonnel.length === 1 ? "" : "s"}
+        </div>
+      )}
+
+      {ready && (
+        <div className="absolute left-3 top-14 z-20 w-[min(280px,calc(100%-24px))]">
+          <div className="flex items-center gap-2 rounded-xl border border-[#f2c9b6] bg-white/95 px-3 py-2 shadow-md backdrop-blur">
+            <Search className="h-4 w-4 shrink-0 text-[#f47f5f]" />
+            <input
+              aria-label="Search live officer by name or badge ID"
+              className="min-w-0 flex-1 bg-transparent text-[12px] text-[#342018] outline-none placeholder:text-[#a88778]"
+              onChange={(event) => {
+                setOfficerQuery(event.target.value);
+                setSelectedPersonnelId(null);
+              }}
+              placeholder="Officer name or badge ID"
+              value={officerQuery}
+            />
+          </div>
+          {officerQuery.trim() && !selectedPersonnelId && (
+            <div className="mt-1 overflow-hidden rounded-xl border border-[#f2c9b6] bg-white shadow-lg">
+              {officerMatches.length ? officerMatches.map((officer) => (
+                <button
+                  className="flex w-full items-center justify-between gap-3 border-b border-[#f2d8ca] px-3 py-2.5 text-left last:border-0 hover:bg-[#fff0e8]"
+                  key={officer.id}
+                  onClick={() => selectOfficer(officer)}
+                  type="button"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-[12px] font-bold text-[#342018]">{officer.name}</span>
+                    <span className="block font-mono text-[9px] text-[#a88778]">{officer.badge_id} · {officer.rank}</span>
+                  </span>
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${officer.is_available ? "bg-[#22d3ee]" : "bg-[#3b82f6]"}`} />
+                </button>
+              )) : (
+                <div className="px-3 py-3 text-[11px] text-[#a88778]">No live GPS match.</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* No-key notice */}
       {!MAPPLS_KEY && (

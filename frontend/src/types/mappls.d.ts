@@ -4,6 +4,7 @@ export interface MaplsMap {
   remove?:    () => void;
   destroy?:   () => void;
   setZoom?:   (z: number) => void;
+  setCenter?: (center: [number, number]) => void;
   fitBounds?: (bounds: [[number, number], [number, number]]) => void;
 }
 

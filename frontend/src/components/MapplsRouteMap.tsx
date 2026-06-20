@@ -52,7 +52,14 @@ export default function MapplsRouteMap({
     initedRef.current = true;
 
     function doInit() {
+      // Prevent double-init: React Strict Mode invokes effects twice; the
+      // second call would hit the Mappls SDK with a container that already
+      // has residual DOM state, causing the SDK to call .destroy() on an
+      // undefined internal reference.
+      if (mapRef.current) return;
+
       if (!window.mappls) { setError("Mappls SDK unavailable"); return; }
+      if (typeof window.mappls.Map !== "function") { setError("Mappls Map not ready"); return; }
 
       const { officerLat: oLat, officerLng: oLng, targetLat: tLat, targetLng: tLng, targetLabel: tLabel } =
         propsRef.current;

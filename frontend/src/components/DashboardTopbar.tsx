@@ -12,19 +12,19 @@ import type { UserRole } from "@/types/prediction";
 type Tab = { href: string; label: string; roles: UserRole[] };
 
 const TABS: Tab[] = [
-  { href: "/dashboard/admin",      label: "Overview",    roles: ["admin"] },
-  { href: "/dashboard/operator",   label: "Dispatch",    roles: ["admin"] },
-  { href: "/dashboard/complaints", label: "Complaints",  roles: ["admin"] },
-  { href: "/dashboard/access",     label: "Access",      roles: ["admin"] },
-  { href: "/dashboard/personnel",  label: "Personnel",   roles: ["admin"] },
-  { href: "/dashboard/field",      label: "Field Orders",roles: ["operator"] },
-  { href: "/dashboard/viewer",     label: "Reports",     roles: ["viewer"] },
+  { href: "/dashboard/admin",      label: "Overview",     roles: ["admin"] },
+  { href: "/dashboard/operator",   label: "Dispatch",     roles: ["admin"] },
+  { href: "/dashboard/complaints", label: "Complaints",   roles: ["admin"] },
+  { href: "/dashboard/access",     label: "Access",       roles: ["admin"] },
+  { href: "/dashboard/personnel",  label: "Personnel",    roles: ["admin"] },
+  { href: "/dashboard/field",      label: "Field Orders", roles: ["operator"] },
+  { href: "/dashboard/viewer",     label: "Reports",      roles: ["viewer"] },
 ];
 
 const ROLE_COLOR: Record<UserRole, string> = {
-  admin:    "text-[#22d3ee]",
-  operator: "text-[#3b82f6]",
-  viewer:   "text-[#a78bfa]",
+  admin:    "text-[#FFE600]",
+  operator: "text-[#22D3EE]",
+  viewer:   "text-[#A78BFA]",
 };
 
 export default function DashboardTopbar() {
@@ -50,18 +50,19 @@ export default function DashboardTopbar() {
     [user?.role]
   );
 
-  const roleColor = user?.role ? (ROLE_COLOR[user.role] ?? "text-[#22d3ee]") : "text-[#22d3ee]";
+  const roleColor = user?.role ? (ROLE_COLOR[user.role] ?? "text-[#FFE600]") : "text-[#FFE600]";
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-40 flex h-11 items-center border-b border-[#1c2e4a] bg-[#060c18]/95 backdrop-blur-md px-4">
+    <header className="fixed left-0 right-0 top-0 z-40 flex h-11 items-center border-b-2 border-[#252535] bg-[#08080F]/97 backdrop-blur-md px-4">
+
       {/* Brand */}
-      <Link className="flex w-[196px] items-center gap-2 shrink-0" href={tabs[0]?.href ?? "/login"}>
-        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-[#0ea5c5] to-[#2d6ce0]">
-          <Radio className="h-3.5 w-3.5 text-white" />
+      <Link className="flex w-[200px] items-center gap-2.5 shrink-0" href={tabs[0]?.href ?? "/login"}>
+        <div className="flex h-6 w-6 items-center justify-center rounded bg-[#FFE600]">
+          <Radio className="h-3.5 w-3.5 text-[#08080F]" />
         </div>
         <div>
-          <div className="font-mono text-[11px] font-bold tracking-[0.18em] text-[#22d3ee]">DRISHTI</div>
-          <div className="mono-id leading-none text-[#3d5278]">BLR-OPS</div>
+          <div className="font-mono text-[11px] font-bold tracking-[0.22em] text-[#FFE600]">DRISHTI</div>
+          <div className="font-mono text-[8px] font-bold uppercase tracking-[0.16em] text-[#444455]">BLR-OPS</div>
         </div>
       </Link>
 
@@ -71,14 +72,15 @@ export default function DashboardTopbar() {
           const active = pathname.startsWith(tab.href);
           return (
             <Link
-              className={`rounded-md px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.07em] transition ${
+              className={`flex items-center gap-1.5 rounded border-2 px-3 py-1 text-[10px] font-black uppercase tracking-[0.1em] transition ${
                 active
-                  ? `bg-[#22d3ee]/10 text-[#22d3ee] border border-[#22d3ee]/25`
-                  : "text-[#3d5278] hover:bg-[#0d1629] hover:text-[#7c9ab8]"
+                  ? "border-[#FFE600]/25 bg-[#FFE600]/8 text-[#FFE600]"
+                  : "border-transparent text-[#444455] hover:border-[#252535] hover:bg-[#0F0F1A] hover:text-[#8888A0]"
               }`}
               href={tab.href}
               key={tab.href}
             >
+              {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#FFE600]" />}
               {tab.label}
             </Link>
           );
@@ -86,16 +88,16 @@ export default function DashboardTopbar() {
       </nav>
 
       {/* Right side */}
-      <div className="flex w-[196px] shrink-0 items-center justify-end gap-3">
+      <div className="flex w-[200px] shrink-0 items-center justify-end gap-3">
         <div className="hidden text-right sm:block">
-          <div className={`text-[11px] font-semibold ${roleColor}`}>
+          <div className={`text-[10px] font-black uppercase tracking-[0.08em] ${roleColor}`}>
             {user?.role ? roleShortLabel(user.role) : "Police"}
           </div>
-          <div className="mono-id truncate text-[#3d5278]">{user?.name ?? "Officer"}</div>
+          <div className="font-mono text-[9px] truncate text-[#444455]">{user?.name ?? "Officer"}</div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="live-breathe h-1.5 w-1.5 rounded-full bg-[#22d3ee]" />
-          <span className="mono-id text-[#22d3ee]">{time || "--:--:--"}</span>
+        <div className="flex items-center gap-1.5 rounded border-2 border-[#252535] bg-[#0F0F1A] px-2.5 py-1">
+          <span className="live-breathe h-1.5 w-1.5 rounded-full bg-[#FFE600]" />
+          <span className="font-mono text-[10px] font-bold text-[#FFE600]">{time || "--:--:--"}</span>
         </div>
       </div>
     </header>

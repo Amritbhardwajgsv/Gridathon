@@ -9,7 +9,10 @@ import type {
   DeploymentStatusUpdatePayload,
   FieldAssignment,
   GrievanceStatusUpdatePayload,
+  IncidentPredictionPayload,
+  IncidentPredictionResponse,
   OperationsSummary,
+  SystemLog,
   PersonnelLocationUpdatePayload,
   PersonnelLocationUpdateResponse,
   PolicePersonnel,
@@ -69,6 +72,13 @@ export async function listCitizenGrievances(): Promise<CitizenGrievance[]> {
 export async function getOperationsSummary(): Promise<OperationsSummary> {
   const response = await api.get<OperationsSummary>("/operations/summary");
   return response.data;
+}
+
+export async function listSystemLogs(limit = 200): Promise<SystemLog[]> {
+  const response = await api.get<{ items: SystemLog[] }>("/viewer/system-logs", {
+    params: { limit },
+  });
+  return response.data.items;
 }
 
 export async function listUsers(): Promise<AuthUser[]> {
@@ -187,6 +197,13 @@ export async function getFieldRoute(
   const response = await api.get<RouteResult>("/field/route", {
     params: { from_lat: fromLat, from_lng: fromLng, to_lat: toLat, to_lng: toLng },
   });
+  return response.data;
+}
+
+export async function predictIncident(
+  payload: IncidentPredictionPayload
+): Promise<IncidentPredictionResponse> {
+  const response = await api.post<IncidentPredictionResponse>("/predict/incident", payload);
   return response.data;
 }
 
