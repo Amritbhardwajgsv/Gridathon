@@ -10,7 +10,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import DeploymentAssignmentPanel from "@/components/DeploymentAssignmentPanel";
+import dynamic from "next/dynamic";
+
+const DeploymentAssignmentPanel = dynamic(() => import("@/components/DeploymentAssignmentPanel"), {
+  loading: () => <div className="flex h-48 items-center justify-center gap-2 text-[12px] text-slate-400"><span className="h-4 w-4 animate-spin rounded-full border-2 border-[#22d3ee] border-t-transparent" />Loading deployment panel…</div>,
+});
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { listCitizenGrievances } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";

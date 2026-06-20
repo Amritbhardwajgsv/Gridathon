@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import {
   Activity,
   ArrowRight,
@@ -14,6 +15,19 @@ import {
   Zap,
 } from "lucide-react";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "DRISHTI — AI Traffic Operations Platform | Bengaluru Police",
+  description:
+    "Bengaluru Police's AI-powered traffic operations command platform. Report incidents in plain language, track complaint status, and see real-time field deployment. Powered by NLP, ML impact prediction, and GPS officer dispatch.",
+  alternates: { canonical: "https://drishti-ex4s.onrender.com" },
+  openGraph: {
+    title: "DRISHTI — AI Traffic Operations | Bengaluru Police",
+    description:
+      "Report a traffic incident in plain language. DRISHTI extracts structured fields, predicts impact, and dispatches Bengaluru Police officers automatically.",
+    url: "https://drishti-ex4s.onrender.com",
+  },
+};
 
 import DescriptionPipelinePreview from "@/components/DescriptionPipelinePreview";
 
@@ -513,6 +527,66 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ── JSON-LD structured data ──────────────────────────────────────────── */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@graph": [
+              {
+                "@type": "WebApplication",
+                "@id": "https://drishti-ex4s.onrender.com/#webapp",
+                name: "DRISHTI — Bengaluru Police Traffic Operations",
+                url: "https://drishti-ex4s.onrender.com",
+                description:
+                  "AI-powered traffic operations platform for Bengaluru Police. Citizens report incidents in plain language; DRISHTI extracts structured data, predicts impact, and dispatches field officers automatically.",
+                applicationCategory: "GovernmentApplication",
+                operatingSystem: "Web",
+                offers: { "@type": "Offer", price: "0", priceCurrency: "INR" },
+                featureList: [
+                  "NLP incident field extraction",
+                  "ML impact and duration prediction",
+                  "GPS officer dispatch",
+                  "Citizen complaint portal",
+                  "Real-time command chat",
+                  "Resource recommendation",
+                ],
+                inLanguage: ["en", "kn"],
+                areaServed: {
+                  "@type": "City",
+                  name: "Bengaluru",
+                  containedInPlace: { "@type": "State", name: "Karnataka", containedInPlace: { "@type": "Country", name: "India" } },
+                },
+              },
+              {
+                "@type": "Organization",
+                "@id": "https://drishti-ex4s.onrender.com/#org",
+                name: "Bengaluru Traffic Police",
+                url: "https://drishti-ex4s.onrender.com",
+                logo: "https://drishti-ex4s.onrender.com/opengraph-image",
+                areaServed: { "@type": "City", name: "Bengaluru" },
+              },
+              {
+                "@type": "WebSite",
+                "@id": "https://drishti-ex4s.onrender.com/#website",
+                url: "https://drishti-ex4s.onrender.com",
+                name: "DRISHTI",
+                publisher: { "@id": "https://drishti-ex4s.onrender.com/#org" },
+                potentialAction: {
+                  "@type": "SearchAction",
+                  target: {
+                    "@type": "EntryPoint",
+                    urlTemplate: "https://drishti-ex4s.onrender.com/citizen/track?id={search_term_string}",
+                  },
+                  "query-input": "required name=search_term_string",
+                },
+              },
+            ],
+          }),
+        }}
+      />
 
       {/* ── Footer ───────────────────────────────────────────────────────────── */}
       <footer className="border-t-2 border-[#252535] px-6 py-10">

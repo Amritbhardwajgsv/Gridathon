@@ -1,8 +1,11 @@
 "use client";
 
-import { Radio } from "lucide-react";
+import { Loader2, Radio } from "lucide-react";
+import dynamic from "next/dynamic";
 
-import AccessRequestsPanel from "@/components/AccessRequestsPanel";
+const AccessRequestsPanel = dynamic(() => import("@/components/AccessRequestsPanel"), {
+  loading: () => <div className="flex h-48 items-center justify-center gap-2 text-sm text-slate-400"><Loader2 className="h-4 w-4 animate-spin" />Loading…</div>,
+});
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 export default function AccessRequestsPage() {

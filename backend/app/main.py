@@ -40,7 +40,7 @@ from app.schemas import (
     TokenResponse,
     UserListResponse,
 )
-from app.core.config import get_mapmyindia_api_key
+from app.core.config import get_cookie_secure, get_jwt_access_token_expire_minutes, get_mapmyindia_api_key
 from app.services.auth_service import AuthError, auth_service, get_current_user, require_roles, security
 from app.services.chat_service import chat_service
 from app.services.deployment_service import deployment_service
@@ -48,6 +48,7 @@ from app.services.grievance_repository import GrievanceRepository, GrievanceReje
 from app.services.prediction_repository import PredictionRepository
 from app.services.prediction_service import PredictionError, PredictionService
 from app.services.resource_recommendation_service import resource_recommendation_service
+from app.services.event_queue import event_queue
 
 logging.basicConfig(
     level=logging.INFO,
@@ -142,13 +143,21 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Sliding-window rate limiter: 120 requests / 60 s per IP. Health exempt."""
 
-    _LIMIT = 120
+    _LIMIT  = 120
     _WINDOW = 60
     _EXEMPT = {"/health", "/docs", "/openapi.json", "/redoc"}
+    _PRUNE_EVERY = 500   # prune stale IP entries every N requests
 
     def __init__(self, app: object) -> None:
         super().__init__(app)
-        self._buckets: dict[str, list[float]] = defaultdict(list)
+        self._buckets: dict[str, list[float]] = {}
+        self._request_count = 0
+
+    def _prune(self, now: float) -> None:
+        """Remove IP entries whose windows have fully expired to prevent unbounded growth."""
+        stale = [ip for ip, ts in self._buckets.items() if not ts or now - ts[-1] >= self._WINDOW]
+        for ip in stale:
+            del self._buckets[ip]
 
     async def dispatch(self, request: Request, call_next: object) -> Response:
         if request.url.path in self._EXEMPT:
@@ -156,8 +165,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         client_ip = (request.client.host if request.client else None) or "unknown"
         now = time.time()
-        bucket = self._buckets[client_ip]
-        bucket[:] = [t for t in bucket if now - t < self._WINDOW]
+
+        self._request_count += 1
+        if self._request_count % self._PRUNE_EVERY == 0:
+            self._prune(now)
+
+        bucket = self._buckets.get(client_ip, [])
+        bucket = [t for t in bucket if now - t < self._WINDOW]
 
         if len(bucket) >= self._LIMIT:
             return Response(
@@ -168,6 +182,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             )
 
         bucket.append(now)
+        self._buckets[client_ip] = bucket
         try:
             return await call_next(request)
         except Exception:
@@ -180,10 +195,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    prediction_service.load_models()
-    resource_recommendation_service.load_models()
-    logger.info("DRISHTI backend ready — models loaded")
+    from app.core.config import get_database_url
+    db_url = get_database_url()
+    event_queue.init(db_url)
+    event_queue.start()
+    event_queue.replay_pending()
+    logger.info("DRISHTI backend starting — event queue ready, models load on first /predict-impact call")
     yield
+    event_queue.stop()
     logger.info("DRISHTI backend shutdown")
 
 
@@ -260,9 +279,20 @@ def register(request: RegisterRequest) -> AuthUserResponse:
 
 
 @app.post("/auth/login", response_model=TokenResponse, tags=["auth"])
-def login(request: LoginRequest) -> TokenResponse:
+def login(request: LoginRequest, response: Response) -> TokenResponse:
     try:
-        return auth_service.login(request)
+        token_response = auth_service.login(request)
+        secure = get_cookie_secure()
+        response.set_cookie(
+            key="access_token",
+            value=token_response.access_token,
+            httponly=True,
+            secure=secure,
+            samesite="none" if secure else "lax",
+            max_age=get_jwt_access_token_expire_minutes() * 60,
+            path="/",
+        )
+        return token_response
     except AuthError as exc:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 
@@ -274,15 +304,25 @@ def me(user: AuthUserResponse = Depends(get_current_user)) -> AuthUserResponse:
 
 @app.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT, tags=["auth"])
 def logout(
+    request: Request,
+    response: Response,
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> None:
     """
-    Blacklist the supplied JWT in Redis so it cannot be reused even if the
-    client somehow retains it.  The client must also clear its local storage.
-    Always returns 204 — never reveals whether the token was already invalid.
+    Blacklist the JWT (from cookie or Bearer header) in Redis and clear the
+    auth cookie. Always returns 204 — never reveals whether the token was invalid.
     """
-    if credentials:
-        auth_service.logout(credentials.credentials)
+    token = request.cookies.get("access_token") or (credentials.credentials if credentials else None)
+    if token:
+        auth_service.logout(token)
+    secure = get_cookie_secure()
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        secure=secure,
+        httponly=True,
+        samesite="none" if secure else "lax",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -370,7 +410,22 @@ def create_deployment_order(
     user: AuthUserResponse = Depends(require_roles("admin", "operator")),
 ) -> DeploymentOrderResponse:
     try:
-        return deployment_service.create_order(request, str(user.id))
+        order = deployment_service.create_order(request, str(user.id))
+        event_queue.publish(
+            "deployment.created",
+            order.order_number,
+            {
+                "order_id"     : str(order.id),
+                "order_number" : order.order_number,
+                "grievance_id" : str(request.grievance_id) if request.grievance_id else None,
+                "corridor"     : order.corridor,
+                "zone"         : order.zone,
+                "priority"     : order.priority,
+                "status"       : order.status,
+                "commander_id" : str(user.id),
+            },
+        )
+        return order
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
@@ -389,7 +444,20 @@ def update_deployment_status(
     user: AuthUserResponse = Depends(require_roles("admin", "operator")),
 ) -> DeploymentOrderResponse:
     try:
-        return deployment_service.update_order_status(order_id, request)
+        order = deployment_service.update_order_status(order_id, request)
+        event_queue.publish(
+            "deployment.status_changed",
+            order.order_number,
+            {
+                "order_id"    : str(order.id),
+                "order_number": order.order_number,
+                "new_status"  : order.status,
+                "corridor"    : order.corridor,
+                "zone"        : order.zone,
+                "updated_by"  : str(user.id),
+            },
+        )
+        return order
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
@@ -611,6 +679,18 @@ def predict_impact(
     try:
         result = prediction_service.predict(request)
         prediction_repository.save_prediction(request, result, user_id=str(user.id))
+        event_queue.publish(
+            "prediction.created",
+            f"{request.corridor or 'unknown'}-{uuid.uuid4().hex[:8]}",
+            {
+                "corridor"                  : request.corridor,
+                "zone"                      : request.zone,
+                "event_cause_grouped"       : request.event_cause_grouped,
+                "predicted_duration_minutes": result.predicted_duration_minutes,
+                "impact_level"              : result.impact_level,
+                "operator_id"               : str(user.id),
+            },
+        )
         return result
     except PredictionError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -676,12 +756,17 @@ def get_deployment_messages(
 async def deployment_chat_ws(
     websocket: WebSocket,
     deployment_id: str,
-    token: str = Query(..., description="JWT access token"),
+    token: str | None = Query(None, description="JWT fallback — cookie is preferred"),
 ) -> None:
     """Real-time bidirectional chat between Command Centre and field officer."""
-    # Authenticate via query-param token (WS headers are not reliably settable)
+    # Cookie is sent automatically by the browser on the WS upgrade request.
+    # The query-param token is kept as a fallback for non-browser clients.
+    ws_token = websocket.cookies.get("access_token") or token
+    if not ws_token:
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
     try:
-        user = auth_service.get_user_from_token(token)
+        user = auth_service.get_user_from_token(ws_token)
     except AuthError:
         await websocket.close(code=4001, reason="Unauthorized")
         return

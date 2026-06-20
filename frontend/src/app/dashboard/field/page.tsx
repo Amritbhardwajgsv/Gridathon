@@ -13,8 +13,15 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import ChatPanel from "@/components/ChatPanel";
-import EnrouteMapPanel from "@/components/EnrouteMapPanel";
+import dynamic from "next/dynamic";
+
+const ChatPanel = dynamic(() => import("@/components/ChatPanel"), {
+  loading: () => <div className="flex h-32 items-center justify-center text-[12px] text-slate-500"><Loader2 className="h-4 w-4 animate-spin mr-2" />Loading chat…</div>,
+});
+const EnrouteMapPanel = dynamic(() => import("@/components/EnrouteMapPanel"), {
+  ssr: false,
+  loading: () => <div className="flex h-48 items-center justify-center text-[12px] text-slate-500"><Loader2 className="h-4 w-4 animate-spin mr-2" />Loading map…</div>,
+});
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { listMyFieldAssignments, officerLodgeGrievance, updateDeploymentStatus, updateMyPersonnelLocation } from "@/lib/api";
 import { getCurrentUser } from "@/lib/auth";

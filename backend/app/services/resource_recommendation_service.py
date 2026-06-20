@@ -99,6 +99,8 @@ class ResourceRecommendationService:
         base_prediction: ImpactPredictionResponse,
         nlp_signal: NlpSignal,
     ) -> tuple[ResourceRecommendation, LearningSignal]:
+        if not self.is_ready:
+            self.load_models()   # lazy-load on first call
         if self.is_ready:
             return self._model_build(payload, base_prediction, nlp_signal)
         return self._policy_build(payload, base_prediction, nlp_signal)

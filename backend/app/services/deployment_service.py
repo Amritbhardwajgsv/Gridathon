@@ -6,6 +6,7 @@ from uuid import uuid4
 from psycopg.rows import dict_row
 
 from app.core.config import get_database_url
+from app.services.cache import cache, PERSONNEL_LIST, DEPLOYMENTS_LIST
 from app.schemas import (
     DeploymentOrderCreateRequest,
     DeploymentOrderResponse,
@@ -77,10 +78,16 @@ class DeploymentService:
                     ),
                 )
                 row = cursor.fetchone()
+        cache.delete(PERSONNEL_LIST)
         return PolicePersonnelResponse(**row)
 
     def list_personnel(self) -> list[PolicePersonnelResponse]:
         self._require_database()
+
+        cached = cache.get(PERSONNEL_LIST)
+        if cached is not None:
+            return [PolicePersonnelResponse(**item) for item in cached]
+
         import psycopg
 
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
@@ -108,6 +115,8 @@ class DeploymentService:
                     """
                 )
                 rows = cursor.fetchall()
+
+        cache.set(PERSONNEL_LIST, [dict(r) for r in rows], ttl=30)
         return [PolicePersonnelResponse(**row) for row in rows]
 
     def create_order(
@@ -256,10 +265,16 @@ class DeploymentService:
                         (personnel_id,),
                     )
 
+        cache.delete(DEPLOYMENTS_LIST, PERSONNEL_LIST)
         return self._hydrate_order(order)
 
     def list_orders(self) -> list[DeploymentOrderResponse]:
         self._require_database()
+
+        cached = cache.get(DEPLOYMENTS_LIST)
+        if cached is not None:
+            return [self._hydrate_order(item) for item in cached]
+
         import psycopg
 
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
@@ -286,6 +301,8 @@ class DeploymentService:
                     """
                 )
                 rows = cursor.fetchall()
+
+        cache.set(DEPLOYMENTS_LIST, [dict(r) for r in rows], ttl=15)
         return [self._hydrate_order(row) for row in rows]
 
     def update_order_status(
@@ -348,6 +365,7 @@ class DeploymentService:
                         (str(row["grievance_id"]),),
                     )
 
+        cache.delete(DEPLOYMENTS_LIST, PERSONNEL_LIST)
         return self._hydrate_order(row)
 
     def _hydrate_order(self, row: dict) -> DeploymentOrderResponse:

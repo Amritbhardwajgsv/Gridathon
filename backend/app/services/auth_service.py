@@ -7,7 +7,7 @@ import bcrypt
 import jwt
 
 logger = logging.getLogger(__name__)
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from psycopg.rows import dict_row
 
@@ -18,6 +18,7 @@ from app.core.config import (
     get_jwt_secret_key,
 )
 from app.schemas import AuthUserResponse, LoginRequest, RegisterRequest, TokenResponse
+from app.services.cache import cache, USERS_LIST
 
 _VALID_RANKS = frozenset(
     ["Constable", "Head Constable", "ASI", "SI", "Inspector", "ACP", "DCP"]
@@ -287,6 +288,7 @@ class AuthService:
                         "alter table app_users add column if not exists rejection_reason text"
                     )
         except psycopg.OperationalError as exc:
+            logger.error("DB connection failed: %s", exc)
             raise HTTPException(
                 status_code=503,
                 detail="Database unavailable. Check your connection string or network.",
@@ -295,6 +297,11 @@ class AuthService:
 
     def list_users(self) -> list[AuthUserResponse]:
         self._require_database()
+
+        cached = cache.get(USERS_LIST)
+        if cached is not None:
+            return [AuthUserResponse(**item) for item in cached]
+
         import psycopg
 
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
@@ -323,7 +330,10 @@ class AuthService:
                         created_at desc
                     """
                 )
-                return [self._user_response(row) for row in cursor.fetchall()]
+                rows = cursor.fetchall()
+
+        cache.set(USERS_LIST, [dict(r) for r in rows], ttl=60)
+        return [self._user_response(row) for row in rows]
 
     def approve_user(self, user_id: str, admin_id: str) -> AuthUserResponse:
         self._require_database()
@@ -385,6 +395,8 @@ class AuthService:
                         ),
                     )
 
+        cache.delete(USERS_LIST)
+
         # Fire-and-forget approval email — never blocks the HTTP response
         try:
             from app.services.email_service import send_approval_email
@@ -434,6 +446,8 @@ class AuthService:
         if not row:
             raise AuthError("User not found")
 
+        cache.delete(USERS_LIST)
+
         # Notify officer of rejection
         try:
             from app.services.email_service import send_rejection_email
@@ -452,16 +466,20 @@ auth_service = AuthService()
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> AuthUserResponse:
-    if credentials is None:
+    # Cookie takes priority; Bearer header is a fallback (e.g. API testing tools)
+    token = request.cookies.get("access_token")
+    if not token and credentials:
+        token = credentials.credentials
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing bearer token",
+            detail="Not authenticated",
         )
-
     try:
-        return auth_service.get_user_from_token(credentials.credentials)
+        return auth_service.get_user_from_token(token)
     except AuthError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

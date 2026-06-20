@@ -37,12 +37,9 @@ export function useDeploymentChat(deploymentId: string | null) {
   const connect = useCallback(() => {
     if (!deploymentId || !mountedRef.current) return;
 
-    const token = typeof window !== "undefined"
-      ? localStorage.getItem("drishti_access_token")
-      : null;
-    if (!token) return;
-
-    const url = `${WS_BASE}/ws/chat/${encodeURIComponent(deploymentId)}?token=${encodeURIComponent(token)}`;
+    // The HttpOnly auth cookie is sent automatically by the browser on the
+    // WebSocket upgrade request — no token in the URL needed.
+    const url = `${WS_BASE}/ws/chat/${encodeURIComponent(deploymentId)}`;
     const ws  = new WebSocket(url);
     wsRef.current = ws;
 

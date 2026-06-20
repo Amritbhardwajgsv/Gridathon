@@ -7,6 +7,8 @@ from app.core.config import get_database_url
 from app.schemas import CitizenGrievanceCreateRequest, CitizenGrievanceResponse, GrievanceStatusUpdateRequest
 from app.services.grievance_agent import triage_grievance
 from app.services.mapmyindia_client import mapmyindia_client
+from app.services.event_queue import event_queue
+from app.services.cache import cache, GRIEVANCES_LIST
 
 
 class GrievanceRejectedError(Exception):
@@ -151,6 +153,22 @@ class GrievanceRepository:
                     },
                 )
                 row = cursor.fetchone()
+                event_queue.publish(
+                    "grievance.created",
+                    tracking_id,
+                    {
+                        "grievance_id"       : str(row["id"]),
+                        "tracking_id"        : row["tracking_id"],
+                        "complaint_type"     : row["complaint_type"],
+                        "severity"           : row["severity"],
+                        "zone"               : row["zone"],
+                        "corridor"           : row["corridor"],
+                        "status"             : row["status"],
+                        "agent_priority_score": row["agent_priority_score"],
+                        "created_at"         : str(row["created_at"]),
+                    },
+                    cursor=cursor,
+                )
                 cursor.execute(
                     """
                     insert into agent_actions (
@@ -177,6 +195,7 @@ class GrievanceRepository:
                     },
                 )
 
+        cache.delete(GRIEVANCES_LIST)
         return CitizenGrievanceResponse(**row)
 
     def update_status(
@@ -214,12 +233,31 @@ class GrievanceRepository:
                     (request.status, grievance_id),
                 )
                 row = cursor.fetchone()
+                if row:
+                    event_queue.publish(
+                        "grievance.status_changed",
+                        str(row["tracking_id"]),
+                        {
+                            "grievance_id": str(row["id"]),
+                            "tracking_id" : row["tracking_id"],
+                            "new_status"  : row["status"],
+                            "severity"    : row["severity"],
+                            "zone"        : row["zone"],
+                            "corridor"    : row["corridor"],
+                        },
+                        cursor=cursor,
+                    )
 
+        cache.delete(GRIEVANCES_LIST)
         return CitizenGrievanceResponse(**row) if row else None
 
     def list_recent(self, limit: int = 50) -> list[CitizenGrievanceResponse]:
         if not self.database_url:
             return []
+
+        cached = cache.get(GRIEVANCES_LIST)
+        if cached is not None:
+            return [CitizenGrievanceResponse(**item) for item in cached]
 
         import psycopg
 
@@ -251,6 +289,7 @@ class GrievanceRepository:
                 )
                 rows = cursor.fetchall()
 
+        cache.set(GRIEVANCES_LIST, [dict(r) for r in rows], ttl=20)
         return [CitizenGrievanceResponse(**row) for row in rows]
 
     def get_by_tracking_id(self, tracking_id: str) -> CitizenGrievanceResponse | None:

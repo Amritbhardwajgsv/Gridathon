@@ -61,7 +61,7 @@ class PredictionService:
         self, payload: ImpactPredictionRequest
     ) -> ImpactPredictionResponse:
         if not self.is_ready:
-            raise PredictionError("Prediction models are not loaded")
+            self.load_models()   # lazy-load on first call
 
         input_data = model_input_dict(payload)
 

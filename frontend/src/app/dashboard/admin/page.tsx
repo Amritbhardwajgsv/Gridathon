@@ -16,8 +16,15 @@ import {
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 
-import ChatPanel from "@/components/ChatPanel";
 import ProtectedRoute from "@/components/ProtectedRoute";
+
+const ChatPanel = dynamic(() => import("@/components/ChatPanel"), {
+  loading: () => (
+    <div className="flex h-32 items-center justify-center gap-2 text-[12px] text-[#3d5278]">
+      <Loader2 className="h-4 w-4 animate-spin text-[#22d3ee]" />Loading chat…
+    </div>
+  ),
+});
 import { getCurrentUser } from "@/lib/auth";
 import { listCitizenGrievances, listDeploymentOrders, listPersonnel, updateGrievanceStatus } from "@/lib/api";
 import { formatDateTime, humanize } from "@/lib/format";
