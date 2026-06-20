@@ -6,7 +6,7 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -621,9 +621,19 @@ def officer_file_grievance(
 )
 def create_citizen_grievance(
     request: CitizenGrievanceCreateRequest,
+    background_tasks: BackgroundTasks,
 ) -> CitizenGrievanceResponse:
     try:
-        return grievance_repository.create(request)
+        result = grievance_repository.create(request)
+        # Gemini validation runs after the response is sent — citizen gets their
+        # tracking ID instantly; Gemini marks the record if it fails.
+        if request.description and len(request.description.strip()) >= 10:
+            background_tasks.add_task(
+                grievance_repository.validate_async,
+                result.tracking_id,
+                request.description,
+            )
+        return result
     except GrievanceRejectedError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
