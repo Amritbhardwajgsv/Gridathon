@@ -1,17 +1,18 @@
 """
 Incident deployment predictor.
-  - llm_firewall()      : validates description via semantic similarity + Gemini
+  - llm_firewall()      : validates description via keyword filter + Gemini (no local model)
   - run_ml_only()       : XGBoost inference only (no firewall) — used by grievance_agent
   - predict_incident()  : full pipeline (firewall → ML) — used by /predict/incident endpoint
+
+SentenceTransformer has been removed to fit within Render free-tier 512MB RAM.
+Embedding features are zero-padded for XGBoost; structural features carry the prediction.
 """
 from __future__ import annotations
 
-import os
 import threading
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from app.core.config import get_gemini_api_key, load_env_file
@@ -24,18 +25,14 @@ STRUCT_FEATURES = [
     "event_cause_enc", "veh_type_enc", "corridor_enc",
     "police_station_enc", "zone_enc",
 ]
-EMB_DIM            = 384
+EMB_DIM              = 384
 TRANSFORMER_FEATURES = [f"emb_{i}" for i in range(EMB_DIM)]
-ALL_FEATURES       = STRUCT_FEATURES + TRANSFORMER_FEATURES
+ALL_FEATURES         = STRUCT_FEATURES + TRANSFORMER_FEATURES
 
-_FW_PASS_THRESHOLD   = 0.50
-_FW_REJECT_THRESHOLD = 0.15
-_GEMINI_TIMEOUT_S    = 8   # hard cap on Gemini API call
+_GEMINI_TIMEOUT_S = 8
 
-# Fast keyword pre-filter — runs BEFORE the model loads.
-# Any description containing at least one of these words is plausibly traffic-related
-# and passes through to the full semantic check.
-# Descriptions with NONE of these words are rejected instantly without touching the model.
+# Keyword pre-filter — instant rejection before any API call.
+# Descriptions with none of these words cannot be traffic incidents.
 _TRAFFIC_KEYWORDS = frozenset([
     # English
     "traffic", "road", "accident", "vehicle", "car", "truck", "bus", "bike", "auto",
@@ -45,24 +42,8 @@ _TRAFFIC_KEYWORDS = frozenset([
     "fallen", "lane", "parking", "tow", "ambulance", "fire", "lorry", "tanker",
     "convoy", "vip", "rally", "protest", "procession", "event", "concert",
     # Kannada transliterated
-    "raste", "rasthe", "mara", "apagata", "vahana", "signal", "jama",
+    "raste", "rasthe", "mara", "apagata", "vahana", "jama",
 ])
-
-_TRAFFIC_ANCHORS = [
-    "heavy truck stalled on highway blocking traffic",
-    "vehicle breakdown on national highway requiring tow truck",
-    "tree fallen across road causing traffic blockage",
-    "accident between vehicles creating traffic jam",
-    "road construction causing traffic diversion",
-    "traffic signal malfunction causing heavy congestion",
-    "bus breakdown blocking main road",
-    "waterlogging on road due to rain causing traffic jam",
-    "VIP convoy movement causing road closure",
-    "large event causing severe traffic congestion near junction",
-    "ಮರ ಬಿದ್ದಿದೆ ರಸ್ತೆ ಬ್ಲಾಕ್ ಆಗಿದೆ",
-    "ವಾಹನ ತಾಂತ್ರಿಕ ದೋಷ ರಸ್ತೆ ಮೇಲೆ ನಿಂತಿದೆ",
-    "ಅಪಘಾತ ಆಗಿದೆ ರಸ್ತೆ ಮುಚ್ಚಿದೆ",
-]
 
 EVENT_CAUSE_KEYWORDS: dict[str, list[str]] = {
     "vehicle_breakdown": ["breakdown", "stalled", "engine failure", "broken down",
@@ -86,32 +67,22 @@ VEH_TYPE_KEYWORDS: dict[str, list[str]] = {
     "car":           ["car", "sedan", "suv", "hatchback", "taxi", "cab", "auto"],
 }
 
-# ─── Singleton state ───────────────────────────────────────────────────────────
+# ─── Singleton state (XGBoost + label encoders only) ──────────────────────────
 
-_lock             = threading.Lock()
-_dur_model: Any   = None
-_pri_model: Any   = None
-_le: dict         = {}
-_embedder: Any    = None
-_anchor_embs: Any = None
+_lock           = threading.Lock()
+_dur_model: Any = None
+_pri_model: Any = None
+_le: dict       = {}
 
 
 def _load_models() -> None:
-    global _dur_model, _pri_model, _le, _embedder, _anchor_embs
+    global _dur_model, _pri_model, _le
     if _dur_model is not None:
         return
     import joblib
-    from sentence_transformers import SentenceTransformer
-
-    _dur_model   = joblib.load(MODELS_DIR / "duration_model.pkl")
-    _pri_model   = joblib.load(MODELS_DIR / "resource_model.pkl")
-    _le          = joblib.load(MODELS_DIR / "label_encoders.pkl")
-    model_name = os.getenv(
-        "SENTENCE_TRANSFORMER_MODEL",
-        "paraphrase-multilingual-MiniLM-L12-v2",
-    )
-    _embedder    = SentenceTransformer(model_name)
-    _anchor_embs = _embedder.encode(_TRAFFIC_ANCHORS, normalize_embeddings=True)
+    _dur_model = joblib.load(MODELS_DIR / "duration_model.pkl")
+    _pri_model = joblib.load(MODELS_DIR / "resource_model.pkl")
+    _le        = joblib.load(MODELS_DIR / "label_encoders.pkl")
 
 
 def _ensure_loaded() -> None:
@@ -159,51 +130,29 @@ def _get_urgency(priority_pred: int, duration_min: float, road_closure: bool) ->
     return "LOW"
 
 
-def _cosine_max(query_emb: np.ndarray) -> float:
-    q    = query_emb / (np.linalg.norm(query_emb) + 1e-9)
-    sims = _anchor_embs @ q
-    return float(np.max(sims))
-
-
-# ─── LLM Firewall ─────────────────────────────────────────────────────────────
+# ─── LLM Firewall (keyword → Gemini, no local model) ─────────────────────────
 
 def _keyword_prefilter(description: str) -> bool:
-    """Return True if the description contains at least one traffic-related keyword.
-    Called BEFORE model loading — zero latency, no I/O."""
     lowered = description.lower()
     return any(kw in lowered for kw in _TRAFFIC_KEYWORDS)
 
 
-def llm_firewall(description: str, emb: np.ndarray | None = None) -> tuple[bool, str]:
-    """Returns (is_valid, reason). Uses Gemini for the uncertain zone.
+def llm_firewall(description: str) -> tuple[bool, str]:
+    """Validates that the description is about a road traffic incident.
 
-    Gate order (fastest → slowest):
-      1. Keyword pre-filter  — zero latency, no model needed
-      2. Semantic similarity — requires embedder loaded
-      3. Gemini API          — only for the uncertain 0.15–0.50 zone
+    Gate 1: keyword pre-filter — zero latency, no network
+    Gate 2: Gemini YES/NO      — ~1-2s, no local model loaded
     """
-    # ── Gate 1: keyword pre-filter (instant, no model load) ──────────────────
+    # ── Gate 1: keyword pre-filter ────────────────────────────────────────────
     if not _keyword_prefilter(description):
         return False, "Input does not describe a road traffic incident."
 
-    # ── Gate 2: semantic similarity (requires embedder) ───────────────────────
-    if emb is None:
-        _ensure_loaded()
-        emb = _embedder.encode([description], normalize_embeddings=True)[0]
-
-    sim = _cosine_max(emb)
-
-    if sim >= _FW_PASS_THRESHOLD:
-        return True, f"Semantic match (sim={sim:.2f})"
-
-    if sim < _FW_REJECT_THRESHOLD:
-        return False, "Input does not describe a road traffic incident."
-
-    # ── Gate 3: Gemini (uncertain zone 0.15–0.50 only) ───────────────────────
+    # ── Gate 2: Gemini validation ─────────────────────────────────────────────
     load_env_file()
     key = get_gemini_api_key()
     if not key:
-        return True, f"Borderline (sim={sim:.2f}); Gemini key not configured"
+        # No Gemini key configured — trust keyword filter
+        return True, "Keyword match (Gemini key not configured)"
 
     try:
         import concurrent.futures
@@ -228,7 +177,7 @@ def llm_firewall(description: str, emb: np.ndarray | None = None) -> tuple[bool,
             answer = future.result(timeout=_GEMINI_TIMEOUT_S)
 
         if answer.startswith("YES"):
-            return True, f"Gemini validated (sim={sim:.2f})"
+            return True, "Gemini validated"
         return False, "Gemini determined the description is not a traffic incident."
     except concurrent.futures.TimeoutError:
         return False, "Validation timed out. Please describe the road situation clearly."
@@ -252,7 +201,8 @@ def run_ml_only(
     day_of_week: int | None = None,
     month: int | None   = None,
 ) -> dict:
-    """Pure ML inference — no firewall. Returns prediction dict."""
+    """Pure ML inference — no firewall. Embedding features are zero-padded
+    (SentenceTransformer removed to fit 512MB RAM); structural features drive predictions."""
     _ensure_loaded()
 
     import datetime
@@ -260,8 +210,6 @@ def run_ml_only(
     if hour        is None: hour        = now.hour
     if day_of_week is None: day_of_week = now.weekday()
     if month       is None: month       = now.month
-
-    emb = _embedder.encode([description])[0]
 
     desc_lower = description.lower()
     if event_cause == "others":
@@ -286,7 +234,8 @@ def run_ml_only(
         "police_station_enc"   : _safe_encode(_le["police_station"], police_station),
         "zone_enc"             : _safe_encode(_le["zone"],            zone),
     }
-    emb_row = {f"emb_{i}": float(emb[i]) for i in range(len(emb))}
+    # Zero-pad embedding dims — model runs on structural features only
+    emb_row = {f"emb_{i}": 0.0 for i in range(EMB_DIM)}
     X = pd.DataFrame([{**struct_row, **emb_row}])[ALL_FEATURES]
 
     duration_min  = float(_dur_model.predict(X)[0])
@@ -315,10 +264,7 @@ def predict_incident(
     **kwargs,
 ) -> dict:
     """Full pipeline: LLM firewall → ML inference."""
-    _ensure_loaded()
-
-    emb = _embedder.encode([description])[0]
-    is_valid, fw_reason = llm_firewall(description, emb)
+    is_valid, fw_reason = llm_firewall(description)
 
     if not is_valid:
         return {
