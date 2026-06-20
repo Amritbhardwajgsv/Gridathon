@@ -30,6 +30,23 @@ ALL_FEATURES       = STRUCT_FEATURES + TRANSFORMER_FEATURES
 
 _FW_PASS_THRESHOLD   = 0.50
 _FW_REJECT_THRESHOLD = 0.15
+_GEMINI_TIMEOUT_S    = 8   # hard cap on Gemini API call
+
+# Fast keyword pre-filter — runs BEFORE the model loads.
+# Any description containing at least one of these words is plausibly traffic-related
+# and passes through to the full semantic check.
+# Descriptions with NONE of these words are rejected instantly without touching the model.
+_TRAFFIC_KEYWORDS = frozenset([
+    # English
+    "traffic", "road", "accident", "vehicle", "car", "truck", "bus", "bike", "auto",
+    "signal", "junction", "jam", "block", "congestion", "diversion", "closure",
+    "breakdown", "stalled", "crash", "collision", "pothole", "barricade", "police",
+    "highway", "flyover", "underpass", "construction", "flood", "waterlog", "tree",
+    "fallen", "lane", "parking", "tow", "ambulance", "fire", "lorry", "tanker",
+    "convoy", "vip", "rally", "protest", "procession", "event", "concert",
+    # Kannada transliterated
+    "raste", "rasthe", "mara", "apagata", "vahana", "signal", "jama",
+])
 
 _TRAFFIC_ANCHORS = [
     "heavy truck stalled on highway blocking traffic",
@@ -150,8 +167,30 @@ def _cosine_max(query_emb: np.ndarray) -> float:
 
 # ─── LLM Firewall ─────────────────────────────────────────────────────────────
 
-def llm_firewall(description: str, emb: np.ndarray) -> tuple[bool, str]:
-    """Returns (is_valid, reason). Uses Gemini for the uncertain zone."""
+def _keyword_prefilter(description: str) -> bool:
+    """Return True if the description contains at least one traffic-related keyword.
+    Called BEFORE model loading — zero latency, no I/O."""
+    lowered = description.lower()
+    return any(kw in lowered for kw in _TRAFFIC_KEYWORDS)
+
+
+def llm_firewall(description: str, emb: np.ndarray | None = None) -> tuple[bool, str]:
+    """Returns (is_valid, reason). Uses Gemini for the uncertain zone.
+
+    Gate order (fastest → slowest):
+      1. Keyword pre-filter  — zero latency, no model needed
+      2. Semantic similarity — requires embedder loaded
+      3. Gemini API          — only for the uncertain 0.15–0.50 zone
+    """
+    # ── Gate 1: keyword pre-filter (instant, no model load) ──────────────────
+    if not _keyword_prefilter(description):
+        return False, "Input does not describe a road traffic incident."
+
+    # ── Gate 2: semantic similarity (requires embedder) ───────────────────────
+    if emb is None:
+        _ensure_loaded()
+        emb = _embedder.encode([description], normalize_embeddings=True)[0]
+
     sim = _cosine_max(emb)
 
     if sim >= _FW_PASS_THRESHOLD:
@@ -160,31 +199,40 @@ def llm_firewall(description: str, emb: np.ndarray) -> tuple[bool, str]:
     if sim < _FW_REJECT_THRESHOLD:
         return False, "Input does not describe a road traffic incident."
 
-    # Uncertain zone → Gemini
+    # ── Gate 3: Gemini (uncertain zone 0.15–0.50 only) ───────────────────────
     load_env_file()
     key = get_gemini_api_key()
     if not key:
         return True, f"Borderline (sim={sim:.2f}); Gemini key not configured"
 
     try:
+        import concurrent.futures
         from google import genai
-        client   = genai.Client(api_key=key)
-        response = client.models.generate_content(
-            model    = "gemini-2.0-flash-lite",
-            contents = (
-                "Is the following description about a road traffic incident "
-                "(breakdown, accident, congestion, tree fall, signal failure, flooding, etc.)? "
-                "Reply with exactly one word: YES or NO.\n\n"
-                f"Description: {description[:500]}"
-            ),
-        )
-        answer = (response.text or "").strip().upper()
+
+        client = genai.Client(api_key=key)
+
+        def _call_gemini() -> str:
+            response = client.models.generate_content(
+                model    = "gemini-2.0-flash-lite",
+                contents = (
+                    "Is the following description about a road traffic incident "
+                    "(breakdown, accident, congestion, tree fall, signal failure, flooding, etc.)? "
+                    "Reply with exactly one word: YES or NO.\n\n"
+                    f"Description: {description[:500]}"
+                ),
+            )
+            return (response.text or "").strip().upper()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            future = ex.submit(_call_gemini)
+            answer = future.result(timeout=_GEMINI_TIMEOUT_S)
+
         if answer.startswith("YES"):
             return True, f"Gemini validated (sim={sim:.2f})"
         return False, "Gemini determined the description is not a traffic incident."
-    except Exception as exc:
-        # Gemini unavailable (rate limit, network, etc.) — reject uncertain-zone input
-        # rather than fail open. Clear traffic incidents already passed at sim >= 0.50.
+    except concurrent.futures.TimeoutError:
+        return False, "Validation timed out. Please describe the road situation clearly."
+    except Exception:
         return False, "Description could not be validated as a traffic incident. Please describe the road situation clearly."
 
 
