@@ -4,6 +4,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from uuid import UUID, uuid4
 
 import joblib
 import numpy as np
@@ -16,11 +17,18 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
-from train_operational_models import (
-    build_operational_frame,
-    save_artifacts as save_operational_artifacts,
-    train_operational_models,
-)
+try:
+    from .train_operational_models import (
+        build_operational_frame,
+        save_artifacts as save_operational_artifacts,
+        train_operational_models,
+    )
+except ImportError:
+    from train_operational_models import (
+        build_operational_frame,
+        save_artifacts as save_operational_artifacts,
+        train_operational_models,
+    )
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
@@ -121,12 +129,10 @@ def load_retraining_dataset() -> pd.DataFrame:
 
     import psycopg
 
-    try:
-        with psycopg.connect(database_url, row_factory=dict_row) as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
+    queries = [
+        """
                     select
+                        null::uuid as source_id,
                         event_cause_grouped,
                         event_type,
                         priority,
@@ -141,20 +147,71 @@ def load_retraining_dataset() -> pd.DataFrame:
                         coalesce(actual_duration_minutes, predicted_duration_minutes) as duration_minutes,
                         coalesce(actual_impact_level, predicted_impact_level) as impact_level
                     from retraining_prediction_dataset
-                    """
-                )
-                rows = cursor.fetchall()
-    except Exception:
-        return pd.DataFrame()
+        """,
+        """
+                    select
+                        source_id,
+                        event_cause_grouped,
+                        event_type,
+                        priority,
+                        requires_road_closure,
+                        corridor,
+                        zone,
+                        latitude,
+                        longitude,
+                        hour,
+                        day_of_week,
+                        month,
+                        duration_minutes,
+                        impact_level
+                    from grievance_retraining_dataset
+        """,
+    ]
+    rows: list[dict] = []
+    for query in queries:
+        try:
+            with psycopg.connect(database_url, row_factory=dict_row) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(query)
+                    rows.extend(cursor.fetchall())
+        except Exception:
+            # Allows deployments to keep retraining while a newer migration is pending.
+            continue
 
     if not rows:
         return pd.DataFrame()
 
-    df = pd.DataFrame(rows)
+    grievance_ids = [row["source_id"] for row in rows if row.get("source_id")]
+    df = pd.DataFrame(rows).drop(columns=["source_id"], errors="ignore")
     df["duration_minutes"] = pd.to_numeric(df["duration_minutes"], errors="coerce")
     df = df.dropna(subset=["duration_minutes"])
     df["log_duration"] = np.log1p(df["duration_minutes"])
-    return df[MODEL_FEATURES + ["duration_minutes", "log_duration", "impact_level"]]
+    result = df[MODEL_FEATURES + ["duration_minutes", "log_duration", "impact_level"]]
+    result.attrs["grievance_source_ids"] = grievance_ids
+    return result
+
+
+def mark_grievances_used(source_ids: list[UUID], batch_id: UUID) -> None:
+    if not source_ids:
+        return
+    database_url = get_database_url()
+    if not database_url:
+        return
+
+    import psycopg
+
+    with psycopg.connect(database_url) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                update citizen_grievances
+                set used_for_retraining = true,
+                    retraining_batch_id = %s
+                where id = any(%s)
+                  and used_for_retraining = false
+                """,
+                (batch_id, source_ids),
+            )
 
 
 def impact_level(duration_minutes: float) -> str:
@@ -274,6 +331,7 @@ def main() -> None:
 
     historical_df = load_astram_dataset(args.csv)
     retraining_df = load_retraining_dataset()
+    grievance_source_ids = retraining_df.attrs.get("grievance_source_ids", [])
     model_df = pd.concat([historical_df, retraining_df], ignore_index=True)
     result = train_models(model_df)
     artifacts = save_artifacts(result, args.output_dir)
@@ -281,6 +339,8 @@ def main() -> None:
     operational_df = build_operational_frame(args.csv)
     operational_result = train_operational_models(operational_df)
     save_operational_artifacts(operational_result, args.output_dir)
+    batch_id = uuid4()
+    mark_grievances_used(grievance_source_ids, batch_id)
 
     print(
         json.dumps(
@@ -288,6 +348,8 @@ def main() -> None:
                 "artifacts": artifacts,
                 "metrics": result["metrics"],
                 "operational_metrics": operational_result["metrics"],
+                "retraining_batch_id": str(batch_id),
+                "grievance_rows_consumed": len(grievance_source_ids),
             },
             indent=2,
         )

@@ -7,18 +7,21 @@ import {
   ClipboardList,
   Loader2,
   MapPinned,
+  MessageSquare,
   Radio,
   ShieldCheck,
   TrendingUp,
   Users,
 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import ChatPanel from "@/components/ChatPanel";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import { getOperationsSummary, listCitizenGrievances, listPersonnel, updateGrievanceStatus } from "@/lib/api";
+import { getCurrentUser } from "@/lib/auth";
+import { listCitizenGrievances, listDeploymentOrders, listPersonnel, updateGrievanceStatus } from "@/lib/api";
 import { formatDateTime, humanize } from "@/lib/format";
-import type { CitizenGrievance, PolicePersonnel } from "@/types/prediction";
+import type { CitizenGrievance, DeploymentOrder, PolicePersonnel } from "@/types/prediction";
 
 const PersonnelMap = dynamic(() => import("@/components/PersonnelMap"), {
   ssr: false,
@@ -46,25 +49,36 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 // Canonical BLR zone prefixes — used to bucket personnel by zone
-const BLR_ZONE_PREFIXES = ["East", "West", "North", "South", "Central"];
-
 export default function AdminDashboardPage() {
   const [grievances,      setGrievances]      = useState<CitizenGrievance[]>([]);
   const [personnel,       setPersonnel]       = useState<PolicePersonnel[]>([]);
+  const [orders,          setOrders]          = useState<DeploymentOrder[]>([]);
   const [isLoading,       setIsLoading]       = useState(true);
+  const [personnelError,  setPersonnelError]  = useState(false);
   const [lastRefresh,     setLastRefresh]     = useState<Date | null>(null);
   const [confirming,      setConfirming]      = useState<string | null>(null);
   const [confirmError,    setConfirmError]    = useState<string | null>(null);
+  const [rightTab,        setRightTab]        = useState<"feed" | "global" | "deployments">("feed");
+  const [chatOrderId,     setChatOrderId]     = useState<string | null>(null);
+
+  const currentUser = getCurrentUser();
 
   async function load() {
+    setPersonnelError(false);
     try {
-      const [gData, , pData] = await Promise.all([
+      const [grievanceResult, personnelResult, orderResult] = await Promise.allSettled([
         listCitizenGrievances(),
-        getOperationsSummary(),
         listPersonnel(),
+        listDeploymentOrders(),
       ]);
-      setGrievances(gData);
-      setPersonnel(pData);
+
+      if (grievanceResult.status === "fulfilled") setGrievances(grievanceResult.value);
+      if (personnelResult.status === "fulfilled") {
+        setPersonnel(personnelResult.value);
+      } else {
+        setPersonnelError(true);
+      }
+      if (orderResult.status === "fulfilled") setOrders(orderResult.value);
       setLastRefresh(new Date());
     } finally { setIsLoading(false); }
   }
@@ -98,31 +112,16 @@ export default function AdminDashboardPage() {
 
   // Dynamic zone coverage — canonical BLR prefixes + any extra zones found in data
   const zoneCoverage = useMemo(() => {
-    // Collect every unique zone label from actual personnel
-    const rawZones = new Map<string, number>();
+    const zones = new Map<string, number>();
     for (const p of personnel) {
-      const z = p.zone?.trim();
-      if (!z) continue;
-      rawZones.set(z, (rawZones.get(z) ?? 0) + 1);
+      const zone = p.zone?.trim().replace(/\s+/g, " ");
+      if (!zone) continue;
+      zones.set(zone, (zones.get(zone) ?? 0) + 1);
     }
-    // Merge: canonical prefixes first, then anything extra from data
-    const result: { label: string; count: number }[] = [];
-    const seenPrefixes = new Set<string>();
-    for (const prefix of BLR_ZONE_PREFIXES) {
-      let count = 0;
-      for (const [zone, n] of rawZones) {
-        if (zone.toLowerCase().includes(prefix.toLowerCase())) {
-          count += n;
-          seenPrefixes.add(zone);
-        }
-      }
-      result.push({ label: `${prefix} Zone`, count });
-    }
-    // Append zones not caught by any canonical prefix
-    for (const [zone, count] of rawZones) {
-      if (!seenPrefixes.has(zone)) result.push({ label: zone, count });
-    }
-    return result;
+
+    return Array.from(zones, ([label, count]) => ({ label, count })).sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: "base" })
+    );
   }, [personnel]);
 
   const typeCounts = useMemo(() => {
@@ -221,9 +220,12 @@ export default function AdminDashboardPage() {
                           </div>
                           <div className="mt-1 text-[13px] font-semibold text-[#f0f6ff]">{g.location_text}</div>
                           <div className="mono-id mt-0.5">{humanize(g.complaint_type)} · {g.corridor ?? "—"}</div>
-                          <p className="mt-1.5 max-w-lg text-[12px] leading-5 text-[#7c9ab8]">
-                            {g.agent_recommendation || "Officer marked situation resolved. Please verify and confirm."}
-                          </p>
+                          {(() => { const r = parseRec(g.agent_recommendation); return (<>
+                            <p className="mt-1.5 max-w-lg text-[12px] leading-5 text-[#7c9ab8]">
+                              {r.text || g.agent_recommendation || "Officer marked situation resolved. Please verify and confirm."}
+                            </p>
+                            <MlBadges rec={r} />
+                          </>); })()}
                           <div className="mono-id mt-2">Reported {formatDateTime(g.created_at)}</div>
                         </div>
                       </div>
@@ -264,42 +266,109 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          <div className="cmd-card overflow-hidden">
-            <div className="flex items-center gap-2 border-b border-[#1c2e4a] px-5 py-4">
-              <Radio className="h-3.5 w-3.5 text-[#22d3ee]" />
-              <div className="panel-title">Live Signal Feed</div>
+          {/* ── Right: Signal Feed + Chat hub ── */}
+          <div className="cmd-card flex flex-col overflow-hidden">
+            {/* Tab bar */}
+            <div className="grid shrink-0 grid-cols-3 border-b border-[#f2d8ca] bg-[#fff8f2]">
+              <RightTabBtn active={rightTab === "feed"} onClick={() => setRightTab("feed")}>
+                <Radio className="h-3 w-3" />Signal Feed
+              </RightTabBtn>
+              <RightTabBtn active={rightTab === "global"} onClick={() => setRightTab("global")}>
+                <MessageSquare className="h-3 w-3" />All Units
+              </RightTabBtn>
+              <RightTabBtn active={rightTab === "deployments"} onClick={() => setRightTab("deployments")}>
+                <Users className="h-3 w-3" />Deployment Chats
+              </RightTabBtn>
             </div>
-            <div className="max-h-[352px] divide-y divide-[#1c2e4a] overflow-y-auto">
-              {isLoading ? (
-                <div className="flex items-center gap-3 px-5 py-8 text-[12px] text-[#3d5278]">
-                  <Loader2 className="h-4 w-4 animate-spin text-[#22d3ee]" />Loading feed…
-                </div>
-              ) : grievances.slice(0, 10).map((item) => {
-                const sev       = SEV[item.severity] ?? SEV.Low;
-                const statusCls = STATUS_COLOR[item.status] ?? "text-[#3d5278]";
-                return (
-                  <div className="px-5 py-3" key={item.id}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex min-w-0 items-start gap-2">
-                        <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${sev.dot}`} />
-                        <div className="min-w-0">
-                          <div className="truncate text-[12px] font-medium text-[#f0f6ff]">{item.location_text}</div>
-                          <div className="truncate text-[11px] text-[#3d5278]">{humanize(item.complaint_type)}</div>
+
+            {/* Signal Feed */}
+            {rightTab === "feed" && (
+              <div className="max-h-[352px] divide-y divide-[#1c2e4a] overflow-y-auto">
+                {isLoading ? (
+                  <div className="flex items-center gap-3 px-5 py-8 text-[12px] text-[#3d5278]">
+                    <Loader2 className="h-4 w-4 animate-spin text-[#22d3ee]" />Loading feed…
+                  </div>
+                ) : grievances.slice(0, 10).map((item) => {
+                  const sev       = SEV[item.severity] ?? SEV.Low;
+                  const statusCls = STATUS_COLOR[item.status] ?? "text-[#3d5278]";
+                  return (
+                    <div className="px-5 py-3" key={item.id}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start gap-2">
+                          <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${sev.dot}`} />
+                          <div className="min-w-0">
+                            <div className="truncate text-[12px] font-medium text-[#f0f6ff]">{item.location_text}</div>
+                            <div className="truncate text-[11px] text-[#3d5278]">{humanize(item.complaint_type)}</div>
+                            <MlBadges rec={parseRec(item.agent_recommendation)} />
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <span className={sev.badge}>{item.severity}</span>
+                          <span className={`mono-id ${statusCls}`}>{humanize(item.status)}</span>
                         </div>
                       </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        <span className={sev.badge}>{item.severity}</span>
-                        <span className={`mono-id ${statusCls}`}>{humanize(item.status)}</span>
-                      </div>
+                      <div className="mono-id mt-1.5 pl-3.5">{formatDateTime(item.created_at)}</div>
                     </div>
-                    <div className="mono-id mt-1.5 pl-3.5">{formatDateTime(item.created_at)}</div>
+                  );
+                })}
+                {!isLoading && !grievances.length ? (
+                  <div className="px-5 py-8 text-[12px] text-[#3d5278]">No live complaints.</div>
+                ) : null}
+              </div>
+            )}
+
+            {/* All-units global broadcast */}
+            {rightTab === "global" && currentUser && (
+              <div className="p-3">
+                <ChatPanel
+                  deploymentId="global_ops"
+                  myName={currentUser.name}
+                  myRole={currentUser.role}
+                />
+                <p className="mt-2 text-[10px] text-[#394252]">
+                  Open broadcast — all logged-in officers see and can reply here.
+                </p>
+              </div>
+            )}
+
+            {/* Per-deployment chats */}
+            {rightTab === "deployments" && (
+              <div className="flex-1 overflow-y-auto">
+                {orders.length === 0 ? (
+                  <div className="px-5 py-8 text-[12px] text-[#3d5278]">No active deployment orders.</div>
+                ) : (
+                  <div className="divide-y divide-[#1c2e4a]">
+                    {orders.slice(0, 6).map((order) => {
+                      const isOpen = chatOrderId === order.id;
+                      return (
+                        <div key={order.id}>
+                          <button
+                            className={`w-full px-4 py-3 text-left transition ${isOpen ? "bg-[#17120a]" : "hover:bg-[#10141b]"}`}
+                            onClick={() => setChatOrderId(isOpen ? null : order.id)}
+                            type="button"
+                          >
+                            <div className="mono-id text-[#e8a034]">{order.order_number}</div>
+                            <div className="mt-0.5 text-[12px] font-semibold text-[#f5f7fb]">
+                              {humanize(order.status)} · {order.assigned_personnel.length} assigned
+                            </div>
+                            <div className="mono-id mt-0.5">{order.corridor} · {formatDateTime(order.created_at)}</div>
+                          </button>
+                          {isOpen && currentUser && (
+                            <div className="px-3 pb-3">
+                              <ChatPanel
+                                deploymentId={order.id}
+                                myName={currentUser.name}
+                                myRole={currentUser.role}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-              {!isLoading && !grievances.length ? (
-                <div className="px-5 py-8 text-[12px] text-[#3d5278]">No live complaints.</div>
-              ) : null}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -350,8 +419,14 @@ export default function AdminDashboardPage() {
           <div className="cmd-card p-5">
             <div className="panel-title mb-5"><Users className="h-3.5 w-3.5 text-[#22d3ee]" />Zone Coverage</div>
             <div className="space-y-3">
-              {zoneCoverage.length === 0 ? (
-                <div className="text-[12px] text-[#3d5278]">No zone data yet.</div>
+              {isLoading ? (
+                <div className="flex items-center gap-2 text-[12px] text-[#3d5278]"><Loader2 className="h-3.5 w-3.5 animate-spin" />Loading zone coverage...</div>
+              ) : personnelError ? (
+                <div className="text-[12px] text-[#ef4444]">Zone coverage could not be loaded. Personnel service is unavailable.</div>
+              ) : personnel.length === 0 ? (
+                <div className="text-[12px] text-[#3d5278]">No active officers are registered yet.</div>
+              ) : zoneCoverage.length === 0 ? (
+                <div className="text-[12px] text-[#3d5278]">Officers are registered, but no zones are assigned.</div>
               ) : zoneCoverage.map(({ label, count }) => {
                 const total = personnel.length || 1;
                 const pct   = Math.round((count / total) * 100);
@@ -376,12 +451,86 @@ export default function AdminDashboardPage() {
   );
 }
 
+// ─── ML recommendation parser ─────────────────────────────────────────────────
+
+interface MlRec {
+  text?: string;
+  duration_min?: number | null;
+  duration_hrs?: number | null;
+  personnel?: number | null;
+  urgency?: string | null;
+  detected_cause?: string | null;
+  detected_veh_type?: string | null;
+}
+
+function parseRec(raw: string | null | undefined): MlRec {
+  if (!raw) return {};
+  try { return JSON.parse(raw) as MlRec; }
+  catch { return { text: raw }; }
+}
+
+const URGENCY_COLOR: Record<string, string> = {
+  CRITICAL: "text-[#ef4444]",
+  HIGH:     "text-[#f59e0b]",
+  MEDIUM:   "text-[#3b82f6]",
+  LOW:      "text-[#10b981]",
+};
+
+function MlBadges({ rec }: { rec: MlRec }) {
+  if (!rec.duration_min && !rec.personnel && !rec.urgency) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {rec.duration_min != null && (
+        <span className="inline-flex items-center gap-1 rounded border border-[#252535] bg-[#0d1117] px-2 py-0.5 font-mono text-[10px] text-[#22d3ee]">
+          ⏱ {Math.round(rec.duration_min)} min
+        </span>
+      )}
+      {rec.personnel != null && (
+        <span className="inline-flex items-center gap-1 rounded border border-[#252535] bg-[#0d1117] px-2 py-0.5 font-mono text-[10px] text-[#a78bfa]">
+          👮 {rec.personnel} officer{rec.personnel !== 1 ? "s" : ""}
+        </span>
+      )}
+      {rec.urgency && (
+        <span className={`inline-flex items-center gap-1 rounded border border-[#252535] bg-[#0d1117] px-2 py-0.5 font-mono text-[10px] font-bold ${URGENCY_COLOR[rec.urgency] ?? "text-[#7c9ab8]"}`}>
+          ⚡ {rec.urgency}
+        </span>
+      )}
+      {rec.detected_cause && rec.detected_cause !== "others" && (
+        <span className="inline-flex items-center gap-1 rounded border border-[#252535] bg-[#0d1117] px-2 py-0.5 font-mono text-[10px] text-[#7c9ab8] capitalize">
+          {rec.detected_cause.replace(/_/g, " ")}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function RightTabBtn({
+  active,
+  children,
+  onClick,
+}: {
+  active: boolean;
+  children: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`inline-flex min-w-0 items-center justify-center gap-1 whitespace-nowrap border-b-2 px-2 py-3 text-[9px] font-semibold uppercase tracking-[0.02em] transition ${
+        active
+          ? "border-[#22d3ee] text-[#22d3ee]"
+          : "border-transparent text-[#3d5278] hover:text-[#7c9ab8]"
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      {children}
+    </button>
+  );
+}
+
 function BarFill({ pct, className }: { pct: number; className: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    ref.current?.style.setProperty("--bar-pct", `${pct}%`);
-  }, [pct]);
-  return <div ref={ref} className={`data-bar h-full rounded-full transition-all duration-700 ${className}`} />;
+  const width = `${Math.max(0, Math.min(100, pct))}%`;
+  return <div className={`h-full rounded-full transition-all duration-700 ${className}`} style={{ width }} />;
 }
 
 function KpiCard({ icon: Icon, iconColor, label, topColor, value, sub, urgent }: {

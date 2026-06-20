@@ -1,0 +1,64 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  weekly-retrainer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["python", "ml/weekly_retraining_scheduler.py"]
+    env_file:
+      - .env
+    environment:
+      RETRAINING_SOURCE_CSV: /data/astram-events.csv
+      RETRAINING_OUTPUT_DIR: /app/app/models/candidates
+      RETRAINING_INTERVAL_DAYS: "7"
+    volumes:
+      - ../Astram event data_anonymized - Astram event data_anonymizedb40ac87 (2).csv:/data/astram-events.csv:ro
+      - ./app/models/candidates:/app/app/models/candidates
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  redis_data:

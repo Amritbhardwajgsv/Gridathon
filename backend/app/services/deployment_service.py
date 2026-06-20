@@ -150,6 +150,27 @@ class DeploymentService:
                         limit=payload.required_personnel_count,
                     )
 
+                # Block manual assignment of officers already on duty
+                if not payload.auto_assign_nearest and personnel_ids:
+                    cursor.execute(
+                        """
+                        select name, badge_id
+                        from police_personnel
+                        where id = any(%s::uuid[])
+                          and is_available = false
+                        """,
+                        (personnel_ids,),
+                    )
+                    busy = cursor.fetchall()
+                    if busy:
+                        names = ", ".join(
+                            f"{r['name']} ({r['badge_id']})" for r in busy
+                        )
+                        raise ValueError(
+                            f"Cannot assign — officer(s) already on duty: {names}. "
+                            "Mark their current order resolved or cancelled first."
+                        )
+
                 resource_recommendation = {
                     "source": "complaint_signal",
                     "agent_priority_score": grievance["agent_priority_score"],

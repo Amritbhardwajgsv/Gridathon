@@ -7,6 +7,7 @@ from app.schemas import (
     ImpactPredictionResponse,
     OperationsSummaryResponse,
     RecentPredictionResponse,
+    SystemLogResponse,
 )
 from app.services.operational_policy import (
     build_idempotency_key,
@@ -259,6 +260,30 @@ class PredictionRepository:
             )
         except Exception:
             return empty
+
+    def system_logs(self, limit: int = 200) -> list[SystemLogResponse]:
+        if not self.database_url:
+            return []
+
+        try:
+            import psycopg
+            from psycopg.rows import dict_row
+
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        select id, aggregate_type, aggregate_key, event_type,
+                               event_payload, created_at
+                        from drishti_event_log
+                        order by created_at desc
+                        limit %s
+                        """,
+                        (max(1, min(limit, 500)),),
+                    )
+                    return [SystemLogResponse(**row) for row in cursor.fetchall()]
+        except Exception:
+            return []
 
     @staticmethod
     def _to_dict(model: Any) -> dict[str, Any]:

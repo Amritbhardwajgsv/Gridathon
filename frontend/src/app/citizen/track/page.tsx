@@ -3,6 +3,7 @@
 import {
   AlertCircle,
   ArrowLeft,
+  ArrowRight,
   CheckCircle2,
   Clock,
   Loader2,
@@ -14,18 +15,18 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { trackCitizenGrievance } from "@/lib/api";
 import { formatDateTime, humanize } from "@/lib/format";
 import type { CitizenGrievance } from "@/types/prediction";
 
 const STATUS_STEPS = [
-  { key: "pending",              label: "Received",         desc: "Complaint logged and a tracking token issued." },
-  { key: "in_progress",         label: "In Progress",      desc: "Command Centre operator reviewing and triaging." },
-  { key: "assigned",            label: "Deployed",         desc: "Field officer dispatched to the location." },
-  { key: "pending_verification", label: "Officer Resolved", desc: "Officer has resolved the situation. Awaiting Command Centre sign-off." },
-  { key: "resolved",            label: "Confirmed",        desc: "Command Centre confirmed. Complaint officially closed." },
+  { key: "pending",               label: "Received",         desc: "Complaint logged and a tracking token issued." },
+  { key: "in_progress",           label: "In Progress",      desc: "Command Centre operator reviewing and triaging." },
+  { key: "assigned",              label: "Deployed",         desc: "Field officer dispatched to the location." },
+  { key: "pending_verification",  label: "Officer Resolved", desc: "Officer has resolved. Awaiting Command Centre sign-off." },
+  { key: "resolved",              label: "Confirmed",        desc: "Command Centre confirmed. Complaint officially closed." },
 ];
 const STATUS_ORDER = STATUS_STEPS.map((s) => s.key);
 
@@ -48,7 +49,7 @@ export default function CitizenTrackPage() {
     if (token) { setTrackingId(token); lookup(token); }
   }, []);
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     lookup(trackingId);
   }
@@ -71,42 +72,42 @@ export default function CitizenTrackPage() {
   const currentStep = result ? STATUS_ORDER.indexOf(result.status) : -1;
 
   return (
-    <div className="min-h-screen bg-[#060c18] text-[#dde8f5]">
+    <div className="min-h-screen bg-[#08080F] text-[#F0F0F8]">
 
       {/* Nav */}
-      <header className="sticky top-0 z-40 border-b border-[#1c2e4a] bg-[#060c18]/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-5 py-3.5">
-          <Link className="flex items-center gap-2.5" href="/">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#0ea5c5] to-[#2d6ce0]">
-              <Radio className="h-4 w-4 text-white" />
+      <header className="sticky top-0 z-40 border-b-2 border-[#252535] bg-[#08080F]/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
+          <Link className="flex items-center gap-3" href="/">
+            <div className="flex h-8 w-8 items-center justify-center rounded bg-[#FFE600]">
+              <Radio className="h-4 w-4 text-[#08080F]" />
             </div>
-            <span className="font-mono text-[13px] font-bold tracking-[0.18em] text-[#22d3ee]">DRISHTI</span>
+            <span className="font-mono text-[12px] font-bold tracking-[0.22em] text-[#FFE600]">DRISHTI</span>
           </Link>
-          <div className="mono-id text-[#3d5278]">Karnataka State Police · Bengaluru Traffic</div>
+          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#444455]">Karnataka State Police · Bengaluru Traffic</div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-5 py-14">
+      <main className="mx-auto max-w-2xl px-6 py-14">
 
-        {/* Back */}
-        <Link className="mb-8 inline-flex items-center gap-2 text-[12px] text-[#3d5278] transition hover:text-[#7c9ab8]" href="/">
+        <Link className="mb-8 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.1em] text-[#444455] transition hover:text-[#8888A0]" href="/">
           <ArrowLeft className="h-3.5 w-3.5" />Back to DRISHTI
         </Link>
 
-        {/* Heading */}
-        <div className="mb-10 text-center">
-          <div className="section-kicker mb-3 text-[#22d3ee]">Complaint Tracking</div>
-          <h1 className="text-[28px] font-bold text-[#f0f6ff]">Track your complaint</h1>
-          <p className="mx-auto mt-3 max-w-md text-[14px] leading-7 text-[#7c9ab8]">
+        <div className="mb-10">
+          <div className="section-kicker mb-3 text-[#FFE600]">+ Complaint Tracking</div>
+          <h1 className="text-[34px] font-black uppercase leading-[1.0] tracking-[-0.01em] text-[#F0F0F8]">
+            Track your<br />complaint.
+          </h1>
+          <p className="mt-4 text-[13px] leading-6 text-[#8888A0]">
             Enter the token you received after filing. Format:{" "}
-            <span className="font-mono text-[#dde8f5]">DRS-BTP-XXXXXXXXXX</span>
+            <span className="font-mono font-bold text-[#F0F0F8]">DRS-BTP-XXXXXXXXXX</span>
           </p>
         </div>
 
-        {/* Search */}
-        <form className="flex gap-2" onSubmit={handleSubmit}>
+        {/* Search bar */}
+        <form className="flex gap-3" onSubmit={handleSubmit}>
           <input
-            className="field-dark flex-1 py-3 font-mono text-[13px] uppercase tracking-widest"
+            className="field-dark flex-1 font-mono text-[13px] uppercase tracking-widest"
             disabled={loading}
             onChange={(e) => setTrackingId(e.target.value)}
             placeholder="DRS-BTP-XXXXXXXXXX"
@@ -120,105 +121,136 @@ export default function CitizenTrackPage() {
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             Track
+            {!loading && <ArrowRight className="h-3.5 w-3.5" />}
           </button>
         </form>
 
         {/* Error states */}
         {error ? (
-          <div className="mt-6 flex items-center gap-3 rounded-xl border border-[#ef4444]/25 bg-[#ef4444]/8 px-4 py-3 text-[13px] text-[#fca5a5]">
-            <AlertCircle className="h-4 w-4 shrink-0 text-[#ef4444]" />{error}
+          <div className="mt-6 flex items-center gap-3 rounded border-2 border-[#EF4444]/30 bg-[#EF4444]/8 px-4 py-3 text-[13px] text-[#FCA5A5]">
+            <AlertCircle className="h-4 w-4 shrink-0 text-[#EF4444]" />{error}
           </div>
         ) : null}
 
         {notFound ? (
-          <div className="mt-6 rounded-xl border border-[#1c2e4a] bg-[#0d1629] p-8 text-center">
-            <XCircle className="mx-auto h-8 w-8 text-[#3d5278]" />
-            <div className="mt-3 text-[14px] font-semibold text-[#f0f6ff]">Token not found</div>
-            <p className="mt-1.5 text-[12px] text-[#3d5278]">
-              Check for typos. Tokens are case-insensitive and include the full prefix.
-            </p>
+          <div className="browser-card mt-6">
+            <div className="browser-card-header border-b-2 border-[#252535]">
+              <span className="browser-dot browser-dot-red" />
+              <span className="browser-dot browser-dot-yellow" />
+              <span className="browser-dot browser-dot-green" />
+              <span className="ml-3 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#444455]">NOT FOUND</span>
+            </div>
+            <div className="p-8 text-center">
+              <XCircle className="mx-auto h-8 w-8 text-[#444455]" />
+              <div className="mt-3 text-[15px] font-black uppercase text-[#F0F0F8]">Token not found</div>
+              <p className="mt-1.5 text-[12px] text-[#444455]">
+                Check for typos. Tokens are case-insensitive and include the full prefix.
+              </p>
+            </div>
           </div>
         ) : null}
 
         {/* Result */}
         {result ? (
           <div className="mt-10 space-y-4">
-            {/* Header */}
-            <div className="cmd-card p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="mono-id text-[#22d3ee]">{result.tracking_id}</div>
-                  <h2 className="mt-2 text-[20px] font-bold text-[#f0f6ff]">{result.location_text}</h2>
-                  <div className="mono-id mt-1">
-                    {[humanize(result.complaint_type), result.corridor, result.zone].filter(Boolean).join(" · ")}
-                  </div>
-                </div>
-                <span className={SEV_BADGE[result.severity] ?? "badge badge-muted"}>
-                  {result.severity}
-                </span>
+
+            {/* Header card */}
+            <div className="browser-card">
+              <div className="browser-card-header border-b-2 border-[#252535]">
+                <span className="browser-dot browser-dot-red" />
+                <span className="browser-dot browser-dot-yellow" />
+                <span className="browser-dot browser-dot-green" />
+                <span className="ml-3 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#FFE600]">{result.tracking_id}</span>
               </div>
-              <p className="mt-4 text-[13px] leading-6 text-[#7c9ab8]">{result.description}</p>
-              <div className="mt-4 flex items-center gap-2 text-[12px] text-[#3d5278]">
-                <Clock className="h-3.5 w-3.5" />Reported {formatDateTime(result.created_at)}
+              <div className="p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-[20px] font-black uppercase tracking-[-0.01em] text-[#F0F0F8]">{result.location_text}</h2>
+                    <div className="mt-1 font-mono text-[10px] text-[#444455]">
+                      {[humanize(result.complaint_type), result.corridor, result.zone].filter(Boolean).join(" · ")}
+                    </div>
+                  </div>
+                  <span className={SEV_BADGE[result.severity] ?? "badge badge-muted"}>
+                    {result.severity}
+                  </span>
+                </div>
+                <p className="mt-4 text-[13px] leading-6 text-[#8888A0]">{result.description}</p>
+                <div className="mt-4 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#444455]">
+                  <Clock className="h-3.5 w-3.5" />Reported {formatDateTime(result.created_at)}
+                </div>
               </div>
             </div>
 
             {/* Data cards */}
             <div className="grid grid-cols-3 gap-3">
-              <DataCard icon={<Clock className="h-4 w-4 text-[#22d3ee]" />} label="Status" value={humanize(result.status)} />
-              <DataCard icon={<ShieldCheck className="h-4 w-4 text-[#a78bfa]" />} label="Priority score" value={`${result.agent_priority_score ?? "--"}/100`} />
-              <DataCard icon={<MapPinned className="h-4 w-4 text-[#3b82f6]" />} label="Corridor" value={result.corridor || "Mapping…"} />
+              <DataCard icon={<Clock className="h-4 w-4 text-[#FFE600]" />} label="Status" value={humanize(result.status)} />
+              <DataCard icon={<ShieldCheck className="h-4 w-4 text-[#A78BFA]" />} label="Priority" value={`${result.agent_priority_score ?? "--"}/100`} />
+              <DataCard icon={<MapPinned className="h-4 w-4 text-[#22D3EE]" />} label="Corridor" value={result.corridor || "Mapping…"} />
             </div>
 
             {/* Timeline */}
-            <div className="cmd-card p-5">
-              <div className="panel-title mb-6">Status Timeline</div>
-              <ol className="relative space-y-5 border-l border-[#1c2e4a] pl-6">
-                {STATUS_STEPS.map((step, idx) => {
-                  const done   = idx <= currentStep;
-                  const active = idx === currentStep;
-                  return (
-                    <li className="relative" key={step.key}>
-                      <span className={`absolute -left-[25px] flex h-4 w-4 items-center justify-center rounded-full border ${
-                        done ? "border-[#10b981] bg-[#10b981]" : "border-[#1c2e4a] bg-[#060c18]"
-                      }`}>
-                        {done ? <CheckCircle2 className="h-3 w-3 text-[#060c18]" /> : null}
-                      </span>
-                      <div className={`text-[13px] font-semibold ${active ? "text-[#f0f6ff]" : done ? "text-[#7c9ab8]" : "text-[#3d5278]"}`}>
-                        {step.label}
-                        {active ? (
-                          <span className="ml-2 inline-flex items-center rounded bg-[#22d3ee]/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-[#22d3ee]">
-                            Current
-                          </span>
-                        ) : null}
-                      </div>
-                      <p className={`mt-0.5 text-[12px] leading-5 ${done ? "text-[#3d5278]" : "text-[#1c2e4a]"}`}>
-                        {step.desc}
-                      </p>
-                    </li>
-                  );
-                })}
-              </ol>
+            <div className="browser-card">
+              <div className="browser-card-header border-b-2 border-[#252535]">
+                <span className="browser-dot browser-dot-red" />
+                <span className="browser-dot browser-dot-yellow" />
+                <span className="browser-dot browser-dot-green" />
+                <span className="ml-3 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#444455]">STATUS TIMELINE</span>
+              </div>
+              <div className="p-5">
+                <ol className="relative space-y-5 border-l-2 border-[#252535] pl-6">
+                  {STATUS_STEPS.map((step, idx) => {
+                    const done   = idx <= currentStep;
+                    const active = idx === currentStep;
+                    return (
+                      <li className="relative" key={step.key}>
+                        <span className={`absolute -left-[25px] flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+                          done ? "border-[#10B981] bg-[#10B981]" : "border-[#252535] bg-[#08080F]"
+                        }`}>
+                          {done ? <CheckCircle2 className="h-3 w-3 text-[#08080F]" /> : null}
+                        </span>
+                        <div className={`text-[13px] font-bold uppercase tracking-[0.04em] ${active ? "text-[#F0F0F8]" : done ? "text-[#8888A0]" : "text-[#444455]"}`}>
+                          {step.label}
+                          {active ? (
+                            <span className="ml-2 inline-flex items-center rounded border-2 border-[#FFE600]/30 bg-[#FFE600]/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-[#FFE600]">
+                              Current
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className={`mt-0.5 text-[12px] leading-5 ${done ? "text-[#444455]" : "text-[#252535]"}`}>
+                          {step.desc}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
             </div>
 
             {/* Police note */}
             {result.agent_recommendation ? (
-              <div className="cmd-card border-[#22d3ee]/15 p-5">
-                <div className="flex items-center gap-2 text-[12px] font-semibold text-[#22d3ee]">
-                  <ShieldCheck className="h-4 w-4" />Police queue note
+              <div className="browser-card border-2 border-[#FFE600]/20">
+                <div className="browser-card-header border-b-2 border-[#FFE600]/20">
+                  <span className="browser-dot browser-dot-red" />
+                  <span className="browser-dot browser-dot-yellow" />
+                  <span className="browser-dot browser-dot-green" />
+                  <div className="ml-3 flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#FFE600]">
+                    <ShieldCheck className="h-3 w-3" />Police queue note
+                  </div>
                 </div>
-                <p className="mt-3 text-[13px] leading-6 text-[#7c9ab8]">{result.agent_recommendation}</p>
+                <div className="p-5">
+                  <p className="text-[13px] leading-6 text-[#8888A0]">{result.agent_recommendation}</p>
+                </div>
               </div>
             ) : null}
           </div>
         ) : null}
 
         {/* Footer */}
-        <div className="mt-16 border-t border-[#1c2e4a] pt-8 text-center text-[12px] text-[#3d5278]">
+        <div className="mt-16 border-t-2 border-[#252535] pt-8 text-center text-[11px] font-bold uppercase tracking-[0.08em] text-[#444455]">
           Need to report a new incident?{" "}
-          <Link className="text-[#22d3ee] hover:underline" href="/citizen/grievance">Go to citizen portal</Link>
+          <Link className="text-[#FFE600] hover:underline" href="/citizen/grievance">Go to citizen portal</Link>
           {" "}· Emergency:{" "}
-          <a className="text-[#ef4444] hover:underline" href="tel:100">100</a>
+          <a className="text-[#EF4444] hover:underline" href="tel:100">100</a>
         </div>
       </main>
     </div>
@@ -227,11 +259,18 @@ export default function CitizenTrackPage() {
 
 function DataCard({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
-    <div className="cmd-card p-4">
-      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#3d5278]">
-        {icon}{label}
+    <div className="browser-card">
+      <div className="browser-card-header border-b-2 border-[#252535]">
+        <span className="browser-dot browser-dot-red" />
+        <span className="browser-dot browser-dot-yellow" />
+        <span className="browser-dot browser-dot-green" />
       </div>
-      <div className="mt-2 text-[13px] font-semibold text-[#f0f6ff]">{value}</div>
+      <div className="p-3">
+        <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[#444455]">
+          {icon}{label}
+        </div>
+        <div className="mt-2 text-[13px] font-bold text-[#F0F0F8]">{value}</div>
+      </div>
     </div>
   );
 }

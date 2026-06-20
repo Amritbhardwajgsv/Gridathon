@@ -63,7 +63,12 @@ export function useDeploymentChat(deploymentId: string | null) {
           setState(s => ({ ...s, messages: data.messages }));
         } else if (data.type === "message") {
           const msg = data as unknown as ChatMessage;
-          setState(s => ({ ...s, messages: [...s.messages, msg] }));
+          setState(s => {
+            // Guard: server often broadcasts `history` + `message` for the
+            // same event; skip the append if the id is already present.
+            if (s.messages.some(m => m.id === msg.id)) return s;
+            return { ...s, messages: [...s.messages, msg] };
+          });
         }
       } catch { /* ignore malformed frames */ }
     };

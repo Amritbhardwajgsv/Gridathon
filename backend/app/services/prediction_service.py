@@ -45,6 +45,11 @@ class PredictionService:
             self.impact_feature_columns = self._load_feature_columns(
                 "impact_feature_columns.json"
             )
+            self._validate_model_features(
+                self.impact_model,
+                self.impact_feature_columns,
+                "impact",
+            )
             self._repair_passthrough_columns(
                 self.duration_model, self.duration_feature_columns
             )
@@ -61,17 +66,20 @@ class PredictionService:
         input_data = model_input_dict(payload)
 
         try:
-            duration_df = self._build_feature_frame(
-                input_data, self.duration_feature_columns
-            )
             impact_df = self._build_feature_frame(input_data, self.impact_feature_columns)
-
-            predicted_log_duration = self.duration_model.predict(duration_df)[0]
-            predicted_duration_minutes = round(
-                float(np.expm1(predicted_log_duration)), 2
-            )
-
-            predicted_impact = self.impact_model.predict(impact_df)[0]
+            if hasattr(self.duration_model, "named_steps"):
+                duration_df = self._build_feature_frame(
+                    input_data, self.duration_feature_columns
+                )
+                predicted_log_duration = self.duration_model.predict(duration_df)[0]
+                predicted_duration_minutes = round(
+                    float(np.expm1(predicted_log_duration)), 2
+                )
+                predicted_impact = self.impact_model.predict(impact_df)[0]
+            else:
+                predicted_duration_minutes, predicted_impact = (
+                    self._predict_from_description(payload)
+                )
 
             base_response = ImpactPredictionResponse(
                 predicted_duration_minutes=predicted_duration_minutes,
@@ -91,6 +99,40 @@ class PredictionService:
             return base_response
         except Exception as exc:
             raise PredictionError(f"Prediction failed: {exc}") from exc
+
+    @staticmethod
+    def _predict_from_description(
+        payload: ImpactPredictionRequest,
+    ) -> tuple[float, str]:
+        description = (payload.operational_description or payload.event_name or "").strip()
+        if not description:
+            raise PredictionError(
+                "Operational description is required for the XGBoost description model"
+            )
+
+        from app.services.incident_predictor import run_ml_only
+
+        prediction = run_ml_only(
+            description=description,
+            latitude=payload.latitude,
+            longitude=payload.longitude,
+            requires_road_closure=payload.requires_road_closure,
+            corridor=payload.corridor,
+            zone=payload.zone,
+            hour=payload.hour,
+            day_of_week=payload.day_of_week,
+            month=payload.month,
+        )
+        urgency_to_impact = {
+            "CRITICAL": "Critical",
+            "HIGH": "High",
+            "MEDIUM": "Medium",
+            "LOW": "Low",
+        }
+        return (
+            float(prediction["estimated_duration_min"]),
+            urgency_to_impact.get(str(prediction.get("urgency")), "Low"),
+        )
 
     def _load_feature_columns(self, filename: str) -> list[str]:
         columns_path = self.models_dir / filename
@@ -113,6 +155,19 @@ class PredictionService:
             pass
 
         sklearn_column_transformer._RemainderColsList = _RemainderColsList
+
+    @staticmethod
+    def _validate_model_features(
+        model: Any, feature_columns: list[str], model_name: str
+    ) -> None:
+        model_columns = getattr(model, "feature_names_in_", None)
+        if model_columns is None:
+            return
+        if list(model_columns) != feature_columns:
+            raise PredictionError(
+                f"The {model_name} model expects incompatible features. "
+                f"Expected {feature_columns}, got {list(model_columns)}"
+            )
 
     @staticmethod
     def _repair_passthrough_columns(model: Any, feature_columns: list[str]) -> None:

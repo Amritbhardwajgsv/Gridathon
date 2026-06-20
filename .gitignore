@@ -1,6 +1,8 @@
 node_modules/
 .next/
 out/
+*.tsbuildinfo
+backend/app/models/candidates/
 
 __pycache__/
 *.py[cod]

@@ -9,6 +9,10 @@ from app.services.grievance_agent import triage_grievance
 from app.services.mapmyindia_client import mapmyindia_client
 
 
+class GrievanceRejectedError(Exception):
+    """Raised when the LLM firewall rejects the complaint description."""
+
+
 class GrievanceRepository:
     def __init__(self) -> None:
         self.database_url = get_database_url()
@@ -25,6 +29,16 @@ class GrievanceRepository:
 
         tracking_id = f"DRS-BTP-{uuid4().hex[:10].upper()}"
         payload_data = self._to_dict(payload)
+
+        # ── LLM firewall — reject non-traffic descriptions before DB insert ──
+        if payload.description and len(payload.description.strip()) >= 10:
+            import app.services.incident_predictor as _predictor
+            _predictor._ensure_loaded()   # raises on model load failure — hard fail
+            emb = _predictor._embedder.encode([payload.description])[0]
+            is_valid, reason = _predictor.llm_firewall(payload.description, emb)
+            if not is_valid:
+                raise GrievanceRejectedError(reason)
+
         geocode_result = None
 
         if payload.latitude is None or payload.longitude is None:
@@ -49,6 +63,7 @@ class GrievanceRepository:
         )
         # Always use the model-computed severity (overrides any user-supplied value)
         payload_data["severity"] = computed_severity
+        nlp_features = self._training_features(payload_data, recommendation)
 
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
             with connection.cursor() as cursor:
@@ -71,7 +86,13 @@ class GrievanceRepository:
                         geocoding_confidence,
                         geocoding_raw,
                         agent_priority_score,
-                        agent_recommendation
+                        agent_recommendation,
+                        nlp_event_cause,
+                        nlp_vehicle_type,
+                        nlp_event_type,
+                        nlp_priority,
+                        nlp_requires_road_closure,
+                        nlp_extracted_at
                     )
                     values (
                         %(tracking_id)s,
@@ -90,7 +111,13 @@ class GrievanceRepository:
                         %(geocoding_confidence)s,
                         %(geocoding_raw)s::jsonb,
                         %(agent_priority_score)s,
-                        %(agent_recommendation)s
+                        %(agent_recommendation)s,
+                        %(nlp_event_cause)s,
+                        %(nlp_vehicle_type)s,
+                        %(nlp_event_type)s,
+                        %(nlp_priority)s,
+                        %(nlp_requires_road_closure)s,
+                        now()
                     )
                     returning
                         id,
@@ -120,6 +147,7 @@ class GrievanceRepository:
                         else None,
                         "agent_priority_score": priority_score,
                         "agent_recommendation": recommendation,
+                        **nlp_features,
                     },
                 )
                 row = cursor.fetchone()
@@ -263,3 +291,34 @@ class GrievanceRepository:
     @staticmethod
     def _to_dict(payload: CitizenGrievanceCreateRequest) -> dict:
         return payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+
+    @staticmethod
+    def _training_features(payload_data: dict, recommendation: str) -> dict:
+        """Convert NLP inference into stable, model-ready database columns."""
+        try:
+            inference = json.loads(recommendation)
+        except (TypeError, json.JSONDecodeError):
+            inference = {}
+
+        description = str(payload_data.get("description") or "").lower()
+        complaint_type = str(payload_data.get("complaint_type") or "other")
+        cause_fallback = {
+            "accident_or_breakdown": "accident",
+            "road_closure": "road_conditions",
+            "event_congestion": "public_event",
+            "signal_failure": "others",
+            "illegal_parking": "others",
+            "other": "others",
+        }
+        road_terms = ("closed", "blocked", "barricade", "diversion", "no entry")
+        severity = str(payload_data.get("severity") or "Low")
+
+        return {
+            "nlp_event_cause": inference.get("detected_cause")
+            or cause_fallback.get(complaint_type, "others"),
+            "nlp_vehicle_type": inference.get("detected_veh_type") or "unknown",
+            "nlp_event_type": "unplanned",
+            "nlp_priority": "High" if severity in {"High", "Critical"} else "Low",
+            "nlp_requires_road_closure": complaint_type == "road_closure"
+            or any(term in description for term in road_terms),
+        }

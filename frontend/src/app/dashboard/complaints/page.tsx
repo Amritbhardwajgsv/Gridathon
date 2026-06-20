@@ -18,6 +18,7 @@ import PredictionResultCard from "@/components/PredictionResultCard";
 import ProgressBar from "@/components/ProgressBar";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { listCitizenGrievances, updateGrievanceStatus } from "@/lib/api";
+import { modelCorridors, modelZones } from "@/lib/bengaluru";
 import { formatDateTime, humanize } from "@/lib/format";
 import type {
   CitizenGrievance,
@@ -74,9 +75,10 @@ export default function ComplaintsPage() {
   }, []);
 
   const filteredItems = useMemo(() => {
-    if (filter === "urgent") return items.filter((i) => i.severity === "Critical" || i.severity === "High");
-    if (filter === "mapped") return items.filter((i) => i.latitude && i.longitude);
-    return items;
+    const active = items.filter((i) => i.status !== "resolved");
+    if (filter === "urgent") return active.filter((i) => i.severity === "Critical" || i.severity === "High");
+    if (filter === "mapped") return active.filter((i) => i.latitude && i.longitude);
+    return active;
   }, [filter, items]);
 
   const selectedItem = filteredItems.find((i) => i.id === selectedId) || filteredItems[0] || null;
@@ -107,14 +109,8 @@ export default function ComplaintsPage() {
     setForecastPayload(payload);
   }
 
-  // Build initial overrides for PredictionForm from selected complaint
   const forecastOverrides = selectedItem
-    ? {
-        corridor:   selectedItem.corridor   ?? "",
-        zone:       selectedItem.zone       ?? "",
-        latitude:   selectedItem.latitude   ? String(selectedItem.latitude)  : "12.9716",
-        longitude:  selectedItem.longitude  ? String(selectedItem.longitude) : "77.5946",
-      }
+    ? buildForecastOverrides(selectedItem)
     : undefined;
 
   return (
@@ -175,8 +171,8 @@ export default function ComplaintsPage() {
                     <button
                       className={`block w-full px-5 py-4 text-left transition ${
                         selected
-                          ? "border-l-2 border-[#e8a034] bg-[#111f38]"
-                          : "border-l-2 border-transparent hover:bg-[#0d1629]"
+                          ? "border-l-2 border-[#f47f5f] bg-[#fff0e8]"
+                          : "border-l-2 border-transparent bg-white hover:bg-[#fff8f2]"
                       }`}
                       key={item.id}
                       onClick={() => { setSelectedId(item.id); setForecastResult(null); }}
@@ -236,7 +232,7 @@ export default function ComplaintsPage() {
                       </div>
                     ))}
                   </div>
-                  <div className="mt-4 rounded-xl border border-[#1c2e4a] bg-[#0d1629] p-3 text-[12px] leading-5 text-[#7c9ab8]">
+                  <div className="mt-4 rounded-xl border border-[#f2d8ca] bg-[#fff8f2] p-3 text-[12px] leading-5 text-[#795b4e]">
                     {selectedItem.description}
                   </div>
                 </div>
@@ -246,7 +242,7 @@ export default function ComplaintsPage() {
                   <div className="panel-title mb-4 flex items-center gap-2">
                     <ShieldAlert className="h-3.5 w-3.5 text-[#e8a034]" />Triage recommendation
                   </div>
-                  <div className="rounded-xl border border-[#1c2e4a] bg-[#0d1629] p-4">
+                  <div className="rounded-xl border border-[#f2d8ca] bg-[#fff8f2] p-4">
                     <div className="flex items-center justify-between">
                       <span className="section-kicker">Priority score</span>
                       <span className="font-mono text-[24px] font-bold text-[#f5f7fb]">
@@ -339,6 +335,7 @@ export default function ComplaintsPage() {
                         </div>
                       )}
                       <PredictionForm
+                        key={selectedItem.id}
                         onPrediction={handlePrediction}
                         overrides={forecastOverrides}
                       />
@@ -362,6 +359,89 @@ export default function ComplaintsPage() {
       </div>
     </ProtectedRoute>
   );
+}
+
+function buildForecastOverrides(item: CitizenGrievance) {
+  const created = new Date(item.created_at);
+  const description = item.description.trim();
+  const text = description.toLowerCase();
+
+  return {
+    event_name: item.location_text || `Complaint ${item.tracking_id}`,
+    event_cause_grouped: complaintCause(item.complaint_type, text),
+    event_type: "unplanned",
+    priority: item.severity === "Critical" || item.severity === "High" ? "High" : "Low",
+    requires_road_closure: item.complaint_type === "road_closure" || /closed|blocked|barricade|diversion|no entry/.test(text) ? "true" : "false",
+    corridor: modelCorridor(item.corridor, item.zone),
+    zone: modelZone(item.zone),
+    latitude: String(item.latitude ?? 12.9716),
+    longitude: String(item.longitude ?? 77.5946),
+    hour: String(Number.isNaN(created.getTime()) ? 0 : created.getHours()),
+    day_of_week: String(Number.isNaN(created.getTime()) ? 0 : created.getDay()),
+    month: String(Number.isNaN(created.getTime()) ? 1 : created.getMonth() + 1),
+    estimated_crowd_size: item.complaint_type === "event_congestion" ? "5000" : "0",
+    operational_description: description,
+    operator_override_notes: "",
+    idempotency_key: `complaint-${item.id}`,
+  };
+}
+
+function complaintCause(complaintType: string, description: string): string {
+  if (complaintType === "accident_or_breakdown") {
+    return /breakdown|stalled|engine|puncture/.test(description) ? "vehicle_breakdown" : "accident";
+  }
+  if (complaintType === "event_congestion") {
+    if (/protest|strike|bandh/.test(description)) return "protest";
+    if (/procession|march|parade/.test(description)) return "procession";
+    return "public_event";
+  }
+  if (complaintType === "road_closure") return "road_conditions";
+  return "others";
+}
+
+function modelZone(rawZone: string | null | undefined): string {
+  const zone = rawZone?.trim() ?? "";
+  if (modelZones.includes(zone as typeof modelZones[number])) return zone;
+
+  const normalized = zone.toLowerCase();
+  if (normalized.includes("south-east") || normalized.includes("southeast")) return "East Zone 2";
+  if (normalized.includes("north-east") || normalized.includes("northeast")) return "North Zone 2";
+  if (normalized.includes("whitefield")) return "East Zone 2";
+  if (normalized.includes("electronic city")) return "South Zone 2";
+  if (normalized.includes("central")) return "Central Zone 1";
+  if (normalized.includes("east")) return "East Zone 1";
+  if (normalized.includes("west")) return "West Zone 1";
+  if (normalized.includes("north")) return "North Zone 1";
+  if (normalized.includes("south")) return "South Zone 1";
+  return "Central Zone 1";
+}
+
+function modelCorridor(
+  rawCorridor: string | null | undefined,
+  rawZone: string | null | undefined,
+): string {
+  const corridor = rawCorridor?.trim() ?? "";
+  if (modelCorridors.includes(corridor as typeof modelCorridors[number])) return corridor;
+
+  const normalized = corridor.toLowerCase();
+  const zone = modelZone(rawZone);
+  if (normalized.includes("outer ring") || normalized === "orr") {
+    if (zone.startsWith("North")) return "ORR North 1";
+    if (zone.startsWith("West")) return "ORR West 1";
+    return zone.endsWith("2") ? "ORR East 2" : "ORR East 1";
+  }
+  if (normalized.includes("silk board")) return "ORR East 2";
+  if (normalized.includes("hebbal")) return "ORR North 1";
+  if (normalized.includes("kr puram")) return "ORR East 1";
+  if (normalized.includes("mg road")) return "CBD 1";
+  if (normalized.includes("airport") && !normalized.includes("old")) return "Airport New South Road";
+  if (normalized.includes("bannerghatta")) return "Bannerghata Road";
+  if (normalized.includes("tumakuru")) return "Tumkur Road";
+
+  const directMatch = modelCorridors.find((candidate) =>
+    normalized && candidate.toLowerCase().includes(normalized)
+  );
+  return directMatch ?? "Non-corridor";
 }
 
 function StatCard({

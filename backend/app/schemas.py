@@ -106,6 +106,19 @@ class OperationsSummaryResponse(BaseModel):
     recent_predictions: list[RecentPredictionResponse]
 
 
+class SystemLogResponse(BaseModel):
+    id: UUID
+    aggregate_type: str
+    aggregate_key: str
+    event_type: str
+    event_payload: dict
+    created_at: datetime
+
+
+class SystemLogListResponse(BaseModel):
+    items: list[SystemLogResponse]
+
+
 class AuthUserResponse(BaseModel):
     id: UUID
     name: str
@@ -304,3 +317,37 @@ class GrievanceStatusUpdateRequest(BaseModel):
 class DeploymentStatusUpdateRequest(BaseModel):
     status: Literal["draft", "issued", "enroute", "onscene", "resolved", "escalated", "cancelled"]
     notes: str | None = Field(default=None, max_length=500)
+
+
+# ---------------------------------------------------------------------------
+# Incident prediction (ML pipeline + LLM firewall)
+# ---------------------------------------------------------------------------
+
+class IncidentPredictionRequest(BaseModel):
+    description:           str   = Field(..., min_length=10, max_length=2000)
+    latitude:              float = Field(..., examples=[12.9716])
+    longitude:             float = Field(..., examples=[77.5946])
+    requires_road_closure: bool  = False
+    event_cause:           str   = Field(default="others",       max_length=80)
+    veh_type:              str   = Field(default="unknown",      max_length=80)
+    corridor:              str   = Field(default="Non-corridor", max_length=120)
+    police_station:        str   = Field(default="unknown",      max_length=120)
+    zone:                  str   = Field(default="unknown",      max_length=120)
+
+
+class IncidentFirewallResult(BaseModel):
+    passed:        bool
+    reason:        str
+    incident_type: str | None = None
+
+
+class IncidentPredictionResponse(BaseModel):
+    status:                  Literal["OK", "REJECTED"]
+    firewall:                IncidentFirewallResult
+    estimated_duration_min:  float | None = None
+    estimated_duration_hrs:  float | None = None
+    priority:                str   | None = None
+    personnel_to_deploy:     int   | None = None
+    urgency:                 str   | None = None
+    detected_cause:          str   | None = None
+    detected_veh_type:       str   | None = None

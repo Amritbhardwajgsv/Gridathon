@@ -7,12 +7,12 @@ interface EmptyStateProps {
 
 export default function EmptyState({ body, title }: EmptyStateProps) {
   return (
-    <div className="grid place-items-center px-6 py-12 text-center">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded bg-ink-50 text-ink-300">
-        <Inbox className="h-5 w-5" />
+    <div className="grid place-items-center px-6 py-14 text-center">
+      <div className="browser-card inline-block p-5">
+        <Inbox className="h-6 w-6 text-[#444455]" />
       </div>
-      <div className="text-base font-semibold text-ink-950">{title}</div>
-      <p className="mt-2 max-w-md text-sm leading-6 text-ink-500">{body}</p>
+      <div className="mt-5 text-[14px] font-black uppercase tracking-[0.04em] text-[#F0F0F8]">{title}</div>
+      <p className="mt-2 max-w-md text-[13px] leading-6 text-[#8888A0]">{body}</p>
     </div>
   );
 }

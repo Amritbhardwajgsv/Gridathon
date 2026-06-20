@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Loader2,
   MapPinned,
+  MessageSquare,
   Navigation,
   Radio,
   Send,
@@ -61,10 +62,11 @@ export default function DeploymentAssignmentPanel() {
       listPersonnel(),
       listDeploymentOrders(),
     ]);
-    setGrievances(g);
+    const active = g.filter((item) => item.status !== "resolved");
+    setGrievances(active);
     setPersonnel(p);
     setOrders(o);
-    setSelectedGrievanceId((cur) => cur || g[0]?.id || "");
+    setSelectedGrievanceId((cur) => (cur && active.some((a) => a.id === cur) ? cur : active[0]?.id ?? ""));
     setIsLoading(false);
   }
 
@@ -492,7 +494,7 @@ export default function DeploymentAssignmentPanel() {
               <div className="border-b border-[#252b35] px-4 py-3">
                 <div className="panel-title text-[10px]">
                   <MapPinned className="h-3 w-3 text-[#e8a034]" />
-                  Active duty orders · click to open chat
+                  Active duty orders · click to open deployment chat
                 </div>
               </div>
               <div className="divide-y divide-[#1a1f28]">
@@ -530,6 +532,28 @@ export default function DeploymentAssignmentPanel() {
                 ) : null}
               </div>
             </div>
+
+            {/* ── All-units broadcast channel ─────────────────────── */}
+            {currentUser && (
+              <div className="command-panel overflow-hidden">
+                <div className="border-b border-[#252b35] px-4 py-3">
+                  <div className="panel-title text-[10px] flex items-center gap-1.5">
+                    <MessageSquare className="h-3 w-3 text-[#19b7a5]" />
+                    All Units Broadcast
+                  </div>
+                  <div className="mono-id mt-0.5 text-[10px]">
+                    All field officers can see and reply here
+                  </div>
+                </div>
+                <div className="p-3">
+                  <ChatPanel
+                    deploymentId="global_ops"
+                    myName={currentUser.name}
+                    myRole={currentUser.role}
+                  />
+                </div>
+              </div>
+            )}
           </aside>
         </div>
       )}

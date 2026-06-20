@@ -6,12 +6,14 @@ import {
   ClipboardPlus,
   Crosshair,
   Loader2,
+  MessageSquare,
   Navigation,
   Phone,
   Radio,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import ChatPanel from "@/components/ChatPanel";
 import EnrouteMapPanel from "@/components/EnrouteMapPanel";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { listMyFieldAssignments, officerLodgeGrievance, updateDeploymentStatus, updateMyPersonnelLocation } from "@/lib/api";
@@ -63,6 +65,8 @@ export default function FieldAssignmentPage() {
   const [isSubmitting,  setIsSubmitting]  = useState(false);
   const [submittedToken,setSubmittedToken]= useState<string | null>(null);
   const [submitError,   setSubmitError]   = useState<string | null>(null);
+
+  const [chatTab, setChatTab] = useState<"cc" | "units">("cc");
 
   const autoStartedRef = useRef(false);
   const watchIdRef     = useRef<number | null>(null);
@@ -155,7 +159,10 @@ export default function FieldAssignmentPage() {
 
   return (
     <ProtectedRoute allowedRoles={["operator"]}>
-      <div className="space-y-5">
+      <div className="flex gap-5 xl:items-start">
+
+        {/* ── Main content ── */}
+        <div className="min-w-0 flex-1 space-y-5">
 
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -217,9 +224,6 @@ export default function FieldAssignmentPage() {
                 </div>
                 <EnrouteMapPanel
                   complaintType={activeAssignment.complaint_type || "other"}
-                  deploymentId={activeAssignment.order_id}
-                  myName={user?.name ?? "Officer"}
-                  myRole={user?.role ?? "operator"}
                   officerLat={officerPos?.lat ?? null}
                   officerLng={officerPos?.lng ?? null}
                   targetLabel={activeAssignment.complaint_location || activeAssignment.corridor}
@@ -348,8 +352,86 @@ export default function FieldAssignmentPage() {
             </div>
           </div>
         )}
+
+        </div>{/* end main content */}
+
+        {/* ── Chat sidebar ─────────────────────────────────────── */}
+        <aside className="hidden w-72 shrink-0 xl:block">
+          <div className="sticky top-4 space-y-3">
+
+            {/* Channel switcher */}
+            <div className="flex gap-1 rounded border border-[#252b35] bg-[#10141b] p-0.5">
+              <ChatTabBtn
+                active={chatTab === "cc"}
+                icon={<MessageSquare className="h-3 w-3" />}
+                onClick={() => setChatTab("cc")}
+              >
+                Command Centre
+              </ChatTabBtn>
+              <ChatTabBtn
+                active={chatTab === "units"}
+                icon={<Radio className="h-3 w-3" />}
+                onClick={() => setChatTab("units")}
+              >
+                All Units
+              </ChatTabBtn>
+            </div>
+
+            {chatTab === "cc" ? (
+              activeAssignment ? (
+                <ChatPanel
+                  deploymentId={activeAssignment.order_id}
+                  myName={user?.name ?? "Officer"}
+                  myRole={user?.role ?? "operator"}
+                />
+              ) : (
+                <div className="rounded border border-[#252b35] bg-[#10141b] p-4 text-center text-[12px] text-[#394252]">
+                  No active duty — Command Centre chat<br />will appear here when dispatched.
+                </div>
+              )
+            ) : (
+              <ChatPanel
+                deploymentId="global_ops"
+                myName={user?.name ?? "Officer"}
+                myRole={user?.role ?? "operator"}
+              />
+            )}
+
+            <p className="text-[10px] leading-4 text-[#394252]">
+              <span className="font-semibold text-[#505866]">Command Centre</span> — messages to/from
+              your assigned order. <span className="font-semibold text-[#505866]">All Units</span> — open
+              broadcast channel for all logged-in officers.
+            </p>
+          </div>
+        </aside>
+
       </div>
     </ProtectedRoute>
+  );
+}
+
+function ChatTabBtn({
+  active,
+  children,
+  icon,
+  onClick,
+}: {
+  active: boolean;
+  children: React.ReactNode;
+  icon: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.06em] transition ${
+        active ? "bg-[#e8a034] text-[#0a0c0f]" : "text-[#707987] hover:text-[#dce2ea]"
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      {icon}
+      {children}
+    </button>
   );
 }
 

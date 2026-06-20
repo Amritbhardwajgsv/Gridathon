@@ -6,6 +6,7 @@ import { FormEvent, useState } from "react";
 
 import { predictImpact } from "@/lib/api";
 import { savePredictionHistoryItem } from "@/lib/auth";
+import { modelCorridors, modelZones } from "@/lib/bengaluru";
 import type {
   PredictImpactPayload,
   PredictImpactResponse
@@ -38,7 +39,7 @@ type FormState = Record<
 
 const initialFormState: FormState = {
   event_name: "High crowd movement near stadium gate",
-  event_cause_grouped: "political_rally",
+  event_cause_grouped: "public_event",
   event_type: "unplanned",
   priority: "High",
   requires_road_closure: "false",
@@ -63,6 +64,12 @@ export default function PredictionForm({ onPrediction, overrides }: PredictionFo
   const [formData, setFormData] = useState<FormState>({ ...initialFormState, ...overrides });
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const corridorOptions = formData.corridor && !modelCorridors.includes(formData.corridor as typeof modelCorridors[number])
+    ? [formData.corridor, ...modelCorridors]
+    : modelCorridors;
+  const zoneOptions = formData.zone && !modelZones.includes(formData.zone as typeof modelZones[number])
+    ? [formData.zone, ...modelZones]
+    : modelZones;
 
   function updateField(field: keyof FormState, value: string) {
     setFormData((current) => ({ ...current, [field]: value }));
@@ -212,12 +219,20 @@ export default function PredictionForm({ onPrediction, overrides }: PredictionFo
             }
             value={formData.event_cause_grouped}
           >
-            <option value="political_rally">Political rally</option>
-            <option value="festival">Festival</option>
-            <option value="sports_event">Sports event</option>
-            <option value="construction_activity">Construction activity</option>
-            <option value="sudden_gathering">Sudden gathering</option>
+            <option value="accident">Accident</option>
+            <option value="congestion">Congestion</option>
+            <option value="construction">Construction</option>
+            <option value="debris">Debris</option>
+            <option value="others">Other</option>
+            <option value="pot_holes">Potholes</option>
+            <option value="procession">Procession</option>
+            <option value="protest">Protest</option>
+            <option value="public_event">Public event</option>
+            <option value="road_conditions">Road conditions</option>
+            <option value="tree_fall">Tree fall</option>
             <option value="vehicle_breakdown">Vehicle breakdown</option>
+            <option value="vip_movement">VIP movement</option>
+            <option value="water_logging">Water logging</option>
           </select>
         </label>
 
@@ -241,9 +256,7 @@ export default function PredictionForm({ onPrediction, overrides }: PredictionFo
             value={formData.priority}
           >
             <option value="Low">Low</option>
-            <option value="Medium">Medium</option>
             <option value="High">High</option>
-            <option value="Critical">Critical</option>
           </select>
         </label>
 
@@ -263,22 +276,30 @@ export default function PredictionForm({ onPrediction, overrides }: PredictionFo
 
         <label className="text-sm font-medium text-ink-700">
           Corridor
-          <input
+          <select
             className={inputClassName}
             onChange={(event) => updateField("corridor", event.target.value)}
             required
             value={formData.corridor}
-          />
+          >
+            {corridorOptions.map((corridor) => (
+              <option key={corridor} value={corridor}>{corridor}</option>
+            ))}
+          </select>
         </label>
 
         <label className="text-sm font-medium text-ink-700">
           Zone
-          <input
+          <select
             className={inputClassName}
             onChange={(event) => updateField("zone", event.target.value)}
             required
             value={formData.zone}
-          />
+          >
+            {zoneOptions.map((zone) => (
+              <option key={zone} value={zone}>{zone}</option>
+            ))}
+          </select>
         </label>
 
         <label className="text-sm font-medium text-ink-700">

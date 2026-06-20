@@ -28,6 +28,45 @@ export const bengaluruCorridors = [
   "Hebbal flyover approach"
 ];
 
+// Exact categorical values present in the Astram model-training dataset.
+export const modelCorridors = [
+  "Airport New South Road",
+  "Bannerghata Road",
+  "Bellary Road 1",
+  "Bellary Road 2",
+  "CBD 1",
+  "CBD 2",
+  "Hennur Main Road",
+  "Hosur Road",
+  "IRR(Thanisandra road)",
+  "Magadi Road",
+  "Mysore Road",
+  "Non-corridor",
+  "ORR East 1",
+  "ORR East 2",
+  "ORR North 1",
+  "ORR North 2",
+  "ORR West 1",
+  "Old Airport Road",
+  "Old Madras Road",
+  "Tumkur Road",
+  "Varthur Road",
+  "West of Chord Road",
+] as const;
+
+export const modelZones = [
+  "Central Zone 1",
+  "Central Zone 2",
+  "East Zone 1",
+  "East Zone 2",
+  "North Zone 1",
+  "North Zone 2",
+  "South Zone 1",
+  "South Zone 2",
+  "West Zone 1",
+  "West Zone 2",
+] as const;
+
 export const highSignalLocations = [
   {
     label: "Silk Board junction",

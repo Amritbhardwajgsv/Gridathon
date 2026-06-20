@@ -1,593 +1,407 @@
 "use client";
 
+import React from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   Crosshair,
   Loader2,
   MapPin,
   Radio,
   Send,
-  ShieldAlert,
+  Shield,
   Siren,
   Wifi,
 } from "lucide-react";
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
-import {
-  bengaluruCorridors,
-  bengaluruZones,
-  complaintTypeDescriptions,
-  complaintTypeLabels,
-  highSignalLocations,
-} from "@/lib/bengaluru";
+import { highSignalLocations } from "@/lib/bengaluru";
 import { submitCitizenGrievance } from "@/lib/api";
-import type {
-  CitizenGrievance,
-  CitizenGrievancePayload,
-  GrievanceType,
-} from "@/types/prediction";
+import type { CitizenGrievance, CitizenGrievancePayload } from "@/types/prediction";
 
 type FormState = {
-  reporter_name: string;
-  reporter_phone: string;
-  reporter_email: string;
-  complaint_type: GrievanceType;
   location_text: string;
-  zone: string;
-  corridor: string;
-  latitude: string;
-  longitude: string;
-  description: string;
+  latitude:      string;
+  longitude:     string;
+  description:   string;
+  reporter_phone: string;
 };
 
-type FormErrors = Partial<Record<keyof FormState | "contact", string>>;
-
-const initialFormState: FormState = {
-  reporter_name: "",
+const initial: FormState = {
+  location_text:  "",
+  latitude:       "",
+  longitude:      "",
+  description:    "",
   reporter_phone: "",
-  reporter_email: "",
-  complaint_type: "event_congestion",
-  location_text: "",
-  zone: "",
-  corridor: "",
-  latitude: "",
-  longitude: "",
-  description: "",
-};
-
-const SEVERITY_CONFIG = {
-  Critical: { color: "text-[#e05252]", bg: "bg-[#e05252]/15", border: "border-[#e05252]/40" },
-  High:     { color: "text-[#e8a034]", bg: "bg-[#e8a034]/15", border: "border-[#e8a034]/40" },
-  Medium:   { color: "text-[#4e8fe8]", bg: "bg-[#4e8fe8]/15", border: "border-[#4e8fe8]/40" },
-  Low:      { color: "text-[#35b779]", bg: "bg-[#35b779]/15", border: "border-[#35b779]/40" },
 };
 
 export default function CitizenGrievancePage() {
-  const [formData, setFormData] = useState<FormState>(initialFormState);
-  const [errors, setErrors] = useState<FormErrors>({});
-  const [result, setResult] = useState<CitizenGrievance | null>(null);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [locationMessage, setLocationMessage] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLocating, setIsLocating] = useState(false);
+  const [form,        setForm]        = useState<FormState>(initial);
+  const [errors,      setErrors]      = useState<Partial<FormState>>({});
+  const [result,      setResult]      = useState<CitizenGrievance | null>(null);
+  const [errMsg,      setErrMsg]      = useState("");
+  const [locMsg,      setLocMsg]      = useState("");
+  const [submitting,  setSubmitting]  = useState(false);
+  const [isLocating,  setIsLocating]  = useState(false);
 
   const completion = useMemo(() => {
-    const required: Array<keyof FormState> = [
-      "complaint_type",
-      "location_text",
-      "zone",
-      "corridor",
-      "description",
-    ];
-    const done = required.filter((f) => String(formData[f]).trim()).length;
-    const hasContact = Boolean(formData.reporter_phone.trim());
-    const hasCoords  = Boolean(formData.latitude.trim()) && Boolean(formData.longitude.trim());
-    return Math.round(((done + Number(hasContact) + Number(hasCoords)) / (required.length + 2)) * 100);
-  }, [formData]);
+    const fields: Array<keyof FormState> = ["location_text", "description"];
+    const done   = fields.filter((f) => form[f].trim()).length;
+    return Math.round((done / fields.length) * 100);
+  }, [form]);
 
-  function update<K extends keyof FormState>(field: K, value: FormState[K]) {
-    setFormData((c) => ({ ...c, [field]: value }));
-    setErrors((c) => ({ ...c, [field]: undefined, contact: undefined }));
+  function set<K extends keyof FormState>(k: K, v: string) {
+    setForm((c) => ({ ...c, [k]: v }));
+    setErrors((c) => ({ ...c, [k]: undefined }));
   }
 
-  function applyPreset(preset: (typeof highSignalLocations)[number]) {
-    setFormData((c) => ({
+  function applyPreset(p: (typeof highSignalLocations)[number]) {
+    setForm((c) => ({
       ...c,
-      location_text: preset.label,
-      zone:      preset.zone,
-      corridor:  preset.corridor,
-      latitude:  String(preset.latitude),
-      longitude: String(preset.longitude),
+      location_text: p.label,
+      latitude:      String(p.latitude),
+      longitude:     String(p.longitude),
     }));
     setErrors({});
-    setLocationMessage(`Pinned — ${preset.label}`);
+    setLocMsg(`Pinned — ${p.label}`);
   }
 
   function captureGps() {
-    setLocationMessage("");
-    if (!navigator.geolocation) {
-      setLocationMessage("Geolocation not supported in this browser.");
-      return;
-    }
+    setLocMsg("");
+    if (!navigator.geolocation) { setLocMsg("Geolocation not supported."); return; }
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setFormData((c) => ({
+        setForm((c) => ({
           ...c,
           latitude:  pos.coords.latitude.toFixed(6),
           longitude: pos.coords.longitude.toFixed(6),
         }));
-        setLocationMessage("GPS acquired. Add nearest junction name.");
+        setLocMsg("GPS acquired — add nearest landmark name below.");
         setIsLocating(false);
       },
-      () => {
-        setLocationMessage("GPS unavailable. Enter location manually.");
-        setIsLocating(false);
-      },
+      () => { setLocMsg("GPS unavailable. Enter manually or pick a preset."); setIsLocating(false); },
       { enableHighAccuracy: true, maximumAge: 30_000, timeout: 10_000 }
     );
   }
 
-  function validate(): FormErrors {
-    const e: FormErrors = {};
-    if (!formData.reporter_phone.trim())
-      e.contact = "WhatsApp number required for complaint tracking.";
-    if (!formData.location_text.trim())
-      e.location_text = "Nearest junction or landmark required.";
-    if (!formData.zone.trim())
-      e.zone = "BTP zone required.";
-    if (!formData.corridor.trim())
-      e.corridor = "Affected corridor required.";
-    if (!formData.description.trim())
-      e.description = "Describe what is happening.";
-    else if (formData.description.trim().length < 20)
-      e.description = "At least 20 characters needed for triage.";
-    if (formData.latitude && Number.isNaN(Number(formData.latitude)))
-      e.latitude = "Must be a number.";
-    if (formData.longitude && Number.isNaN(Number(formData.longitude)))
-      e.longitude = "Must be a number.";
+  function validate(): Partial<FormState> {
+    const e: Partial<FormState> = {};
+    if (!form.location_text.trim())                   e.location_text  = "Enter the nearest junction or landmark.";
+    if (!form.description.trim())                     e.description    = "Describe what is happening.";
+    else if (form.description.trim().length < 20)     e.description    = "At least 20 characters needed.";
     return e;
   }
 
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setErrorMessage("");
-    setResult(null);
+    setErrMsg(""); setResult(null);
     const errs = validate();
     setErrors(errs);
-    if (Object.keys(errs).length) {
-      setErrorMessage("Complete the highlighted fields before submitting.");
-      return;
-    }
-    setIsSubmitting(true);
+    if (Object.keys(errs).length) { setErrMsg("Fill the required fields before submitting."); return; }
+
+    setSubmitting(true);
     const payload: CitizenGrievancePayload = {
-      reporter_name:  formData.reporter_name || undefined,
-      reporter_phone: formData.reporter_phone || undefined,
-      reporter_email: formData.reporter_email || undefined,
-      complaint_type: formData.complaint_type,
-      location_text:  formData.location_text.trim(),
-      zone:           formData.zone.trim(),
-      corridor:       formData.corridor.trim(),
-      latitude:       formData.latitude  ? Number(formData.latitude)  : undefined,
-      longitude:      formData.longitude ? Number(formData.longitude) : undefined,
-      description:    formData.description.trim(),
+      complaint_type: "other",
+      location_text:  form.location_text.trim(),
+      description:    form.description.trim(),
+      latitude:       form.latitude  ? Number(form.latitude)  : undefined,
+      longitude:      form.longitude ? Number(form.longitude) : undefined,
+      reporter_phone: form.reporter_phone || undefined,
     };
+
     try {
-      const response = await submitCitizenGrievance(payload);
-      setResult(response);
-      setFormData(initialFormState);
+      const res = await submitCitizenGrievance(payload);
+      setResult(res);
+      setForm(initial);
       setErrors({});
-      setLocationMessage("");
-    } catch {
-      setErrorMessage("Submission failed. Police intake may be temporarily unavailable.");
+      setLocMsg("");
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: { reason?: string; code?: string } | string } } })
+        ?.response?.data?.detail;
+      if (detail && typeof detail === "object" && detail.code === "FIREWALL_REJECTED") {
+        setErrors((c) => ({ ...c, description: `AI check: ${detail.reason}` }));
+        setErrMsg("Your description doesn't match a traffic incident. Please describe the actual road situation.");
+      } else {
+        setErrMsg("Submission failed. Police intake may be temporarily unavailable.");
+      }
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
   }
 
-  const sevConfig = result
-    ? (SEVERITY_CONFIG[result.severity as keyof typeof SEVERITY_CONFIG] ?? SEVERITY_CONFIG.Low)
-    : null;
-
   return (
-    <div className="min-h-screen bg-[#0a0c0f] text-[#dce2ea]">
-      {/* ── Top bar ─────────────────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 border-b border-[#252b35] bg-[#0a0c0f]/95 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3">
+    <div className="min-h-screen bg-[#08080F] text-[#F0F0F8]">
+
+      {/* Nav */}
+      <nav className="sticky top-0 z-50 border-b-2 border-[#252535] bg-[#08080F]/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link className="flex items-center gap-3" href="/">
-            <div className="flex h-8 w-8 items-center justify-center rounded border border-[#252b35] bg-[#141820]">
-              <Radio className="h-4 w-4 text-[#e8a034]" />
+            <div className="flex h-8 w-8 items-center justify-center rounded bg-[#FFE600]">
+              <Radio className="h-4 w-4 text-[#08080F]" />
             </div>
             <div>
-              <div className="font-mono text-[12px] font-bold tracking-widest text-[#e8a034]">DRISHTI</div>
-              <div className="mono-id leading-none text-[#707987]">Citizen Incident Portal</div>
+              <div className="font-mono text-[12px] font-bold tracking-[0.22em] text-[#FFE600]">DRISHTI</div>
+              <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#444455]">Citizen Incident Portal</div>
             </div>
           </Link>
           <div className="flex items-center gap-3">
-            <Link
-              className="px-3 py-2 text-[12px] text-[#9ba5b3] transition hover:text-[#f5f7fb]"
-              href="/citizen/track"
-            >
+            <Link className="px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#8888A0] transition hover:text-[#F0F0F8]" href="/citizen/predict">
+              Get Estimate
+            </Link>
+            <Link className="px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#8888A0] transition hover:text-[#F0F0F8]" href="/citizen/track">
               Track Complaint
             </Link>
-            <Link
-              className="inline-flex items-center gap-2 rounded border border-[#252b35] bg-[#141820] px-4 py-2 text-[12px] font-semibold text-[#dce2ea] transition hover:bg-[#1a1f28]"
-              href="/login"
-            >
+            <Link className="inline-flex items-center gap-2 rounded border-2 border-[#252535] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#F0F0F8] transition hover:border-[#FFE600] hover:text-[#FFE600]" href="/login">
               Police Login
             </Link>
           </div>
         </div>
       </nav>
 
-      {/* ── Hero ────────────────────────────────────────────────────────────── */}
-      <div className="ops-surface border-b border-[#252b35] px-5 py-12">
-        <div className="mx-auto max-w-7xl">
-          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#e8a034]/30 bg-[#e8a034]/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#e8a034]">
-                <Siren className="h-3 w-3" />
-                Bengaluru Traffic Police · Public Intake
-              </div>
-              <h1 className="mt-5 text-[32px] font-bold leading-tight text-[#f5f7fb] md:text-[40px]">
-                Report a traffic incident<br />
-                <span className="text-[#e8a034]">to Bengaluru Police</span>
-              </h1>
-              <p className="mt-4 max-w-xl text-[14px] leading-7 text-[#9ba5b3]">
-                Your report enters the police dispatch queue immediately. DRISHTI AI
-                auto-assesses severity and routes it to the nearest available officer.
-                No login required.
-              </p>
-            </div>
-
-            {/* Completion gauge */}
-            <div className="command-panel p-5">
-              <div className="flex items-center justify-between">
-                <div className="section-kicker text-[#e8a034]">Intake completeness</div>
-                <div className={`mono-id rounded px-2 py-0.5 text-[10px] ${
-                  completion >= 90
-                    ? "bg-[#35b779]/15 text-[#35b779]"
-                    : "bg-[#e8a034]/15 text-[#e8a034]"
-                }`}>
-                  {completion >= 90 ? "READY TO SEND" : "NEEDS DETAILS"}
-                </div>
-              </div>
-              <div className="mt-4 flex items-end gap-4">
-                <div className="font-mono text-[48px] font-bold leading-none text-[#f5f7fb]">
-                  {completion}
-                  <span className="text-[20px] text-[#9ba5b3]">%</span>
-                </div>
-              </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-[#252b35]">
-                <div
-                  className="data-bar h-full rounded-full bg-[#e8a034] transition-all duration-500"
-                  style={{ ["--bar-pct" as string]: `${completion}%` }}
-                />
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                {(["complaint_type", "location_text", "zone", "corridor", "description"] as const).map((f) => (
-                  <div
-                    className={`flex items-center gap-1.5 text-[11px] ${
-                      String(formData[f]).trim() ? "text-[#35b779]" : "text-[#505866]"
-                    }`}
-                    key={f}
-                  >
-                    <span className={`h-1 w-1 rounded-full ${String(formData[f]).trim() ? "bg-[#35b779]" : "bg-[#505866]"}`} />
-                    {f.replace(/_/g, " ")}
-                  </div>
-                ))}
-                <div className={`flex items-center gap-1.5 text-[11px] ${formData.reporter_phone.trim() ? "text-[#35b779]" : "text-[#505866]"}`}>
-                  <span className={`h-1 w-1 rounded-full ${formData.reporter_phone.trim() ? "bg-[#35b779]" : "bg-[#505866]"}`} />
-                  phone (whatsapp)
-                </div>
-                <div className={`flex items-center gap-1.5 text-[11px] ${formData.latitude && formData.longitude ? "text-[#35b779]" : "text-[#505866]"}`}>
-                  <span className={`h-1 w-1 rounded-full ${formData.latitude && formData.longitude ? "bg-[#35b779]" : "bg-[#505866]"}`} />
-                  gps coordinates
-                </div>
-              </div>
-            </div>
+      {/* Hero */}
+      <div className="border-b-2 border-[#252535] px-6 py-10">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border-2 border-[#FFE600]/25 bg-[#FFE600]/8 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#FFE600]">
+            <Siren className="h-3.5 w-3.5" />
+            Bengaluru Traffic Police · Public Intake
           </div>
+          <h1 className="text-[36px] font-black uppercase leading-[1.0] tracking-[-0.01em] text-[#F0F0F8] md:text-[44px]">
+            Report a traffic incident.<br />
+            <span className="text-[#FFE600]">Location + detailed description.</span>
+          </h1>
+          <p className="mt-4 max-w-xl text-[14px] leading-7 text-[#8888A0]">
+            Share your current or nearest location, then explain what happened and what
+            is blocked — in English or Kannada. DRISHTI extracts the incident details;
+            the police workflow handles the rest. No login required.
+          </p>
         </div>
       </div>
 
-      {/* ── Body ─────────────────────────────────────────────────────────────── */}
-      <div className="mx-auto max-w-7xl px-5 py-8">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+      {/* Body */}
+      <div className="mx-auto max-w-5xl px-6 py-8">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
 
-          {/* ── Form ─────────────────────────────────────────────────────────── */}
+          {/* Form */}
           <form className="space-y-5" onSubmit={handleSubmit}>
 
-            {/* Location quick-set */}
-            <div className="command-panel p-5">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <div className="panel-title">
-                    <MapPin className="h-3.5 w-3.5 text-[#e8a034]" />
-                    Location
-                  </div>
-                  <div className="mt-1 text-[12px] text-[#707987]">
-                    Tap a hotspot or use GPS to prefill location fields
-                  </div>
+            {/* Location */}
+            <div className="browser-card">
+              <div className="browser-card-header border-b-2 border-[#252535]">
+                <span className="browser-dot browser-dot-red" />
+                <span className="browser-dot browser-dot-yellow" />
+                <span className="browser-dot browser-dot-green" />
+                <div className="ml-3 flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#FFE600]">
+                  <MapPin className="h-3 w-3" /> Location
                 </div>
                 <button
-                  className="inline-flex items-center gap-2 rounded border border-[#252b35] bg-[#10141b] px-3 py-2 text-[12px] font-semibold text-[#dce2ea] transition hover:border-[#e8a034]/40 hover:text-[#e8a034] disabled:opacity-50"
-                  disabled={isLocating}
+                  className="ml-auto inline-flex items-center gap-1.5 rounded border-2 border-[#252535] bg-[#0F0F1A] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-[#F0F0F8] transition hover:border-[#FFE600] hover:text-[#FFE600] disabled:opacity-50"
+                  disabled={isLocating || submitting}
                   onClick={captureGps}
                   type="button"
                 >
-                  {isLocating ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Crosshair className="h-3.5 w-3.5" />
-                  )}
+                  {isLocating ? <Loader2 className="h-3 w-3 animate-spin" /> : <Crosshair className="h-3 w-3" />}
                   {isLocating ? "Acquiring…" : "Use GPS"}
                 </button>
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                {highSignalLocations.map((preset) => (
-                  <button
-                    className="rounded border border-[#252b35] bg-[#10141b] px-3 py-1.5 text-[11px] font-medium text-[#9ba5b3] transition hover:border-[#e8a034]/40 hover:text-[#e8a034]"
-                    key={preset.label}
-                    onClick={() => applyPreset(preset)}
-                    type="button"
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-
-              {locationMessage ? (
-                <div className="mt-3 flex items-center gap-2 text-[12px] text-[#19b7a5]">
-                  <Wifi className="h-3.5 w-3.5" />
-                  {locationMessage}
+              <div className="p-5">
+                {/* Presets */}
+                <p className="mb-3 text-[11px] text-[#444455]">Quick-pin a known location:</p>
+                <div className="flex flex-wrap gap-2">
+                  {highSignalLocations.map((p) => (
+                    <button
+                      className="rounded border-2 border-[#252535] bg-[#0F0F1A] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.04em] text-[#8888A0] transition hover:border-[#FFE600]/40 hover:text-[#FFE600]"
+                      disabled={submitting}
+                      key={p.label}
+                      onClick={() => applyPreset(p)}
+                      type="button"
+                    >
+                      {p.label}
+                    </button>
+                  ))}
                 </div>
-              ) : null}
+                {locMsg && (
+                  <div className="mt-3 flex items-center gap-2 text-[12px] font-semibold text-[#22D3EE]">
+                    <Wifi className="h-3.5 w-3.5" />{locMsg}
+                  </div>
+                )}
+
+                {/* Location name + coords */}
+                <div className="mt-4 space-y-3">
+                  <F label="Nearest junction / landmark" required error={errors.location_text}>
+                    <input
+                      className={inp}
+                      disabled={submitting}
+                      placeholder="e.g. Silk Board Junction, Hebbal Flyover"
+                      value={form.location_text}
+                      onChange={(e) => set("location_text", e.target.value)}
+                    />
+                  </F>
+                  <div className="grid grid-cols-2 gap-3">
+                    <F label="Latitude">
+                      <input className={inp} disabled={submitting} placeholder="12.9716" step="any" type="number" value={form.latitude} onChange={(e) => set("latitude", e.target.value)} />
+                    </F>
+                    <F label="Longitude">
+                      <input className={inp} disabled={submitting} placeholder="77.5946" step="any" type="number" value={form.longitude} onChange={(e) => set("longitude", e.target.value)} />
+                    </F>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Core fields */}
-            <div className="command-panel p-5">
-              <div className="panel-title mb-5">
-                <ShieldAlert className="h-3.5 w-3.5 text-[#e8a034]" />
-                Incident Details
+            {/* Incident */}
+            <div className="browser-card">
+              <div className="browser-card-header border-b-2 border-[#252535]">
+                <span className="browser-dot browser-dot-red" />
+                <span className="browser-dot browser-dot-yellow" />
+                <span className="browser-dot browser-dot-green" />
+                <div className="ml-3 flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#FFE600]">
+                  <Shield className="h-3 w-3" /> Incident Description
+                </div>
+                <div className="ml-auto rounded border border-[#10B981]/30 bg-[#10B981]/10 px-2 py-0.5 font-mono text-[9px] font-bold text-[#10B981]">
+                  Kannada / English
+                </div>
               </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <DarkField label="Complaint type" required>
-                  <select
-                    className={darkSelect}
-                    title="Complaint type"
-                    value={formData.complaint_type}
-                    onChange={(e) => update("complaint_type", e.target.value as GrievanceType)}
-                  >
-                    {Object.entries(complaintTypeLabels).map(([v, l]) => (
-                      <option key={v} value={v}>{l}</option>
-                    ))}
-                  </select>
-                </DarkField>
-
-                <DarkField error={errors.location_text} label="Nearest junction / landmark" required>
-                  <input
-                    className={darkInput}
-                    placeholder="e.g. Trinity Circle, MG Road"
-                    value={formData.location_text}
-                    onChange={(e) => update("location_text", e.target.value)}
-                  />
-                </DarkField>
-
-                <DarkField error={errors.zone} label="BTP zone" required>
-                  <select
-                    className={darkSelect}
-                    title="BTP zone"
-                    value={formData.zone}
-                    onChange={(e) => update("zone", e.target.value)}
-                  >
-                    <option value="">Select zone</option>
-                    {bengaluruZones.map((z) => <option key={z} value={z}>{z}</option>)}
-                  </select>
-                </DarkField>
-
-                <DarkField error={errors.corridor} label="Affected corridor" required>
-                  <select
-                    className={darkSelect}
-                    title="Affected corridor"
-                    value={formData.corridor}
-                    onChange={(e) => update("corridor", e.target.value)}
-                  >
-                    <option value="">Select corridor</option>
-                    {bengaluruCorridors.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </DarkField>
-
-                <DarkField error={errors.contact} label="WhatsApp phone" required>
-                  <input
-                    className={darkInput}
-                    placeholder="9876543210"
-                    value={formData.reporter_phone}
-                    onChange={(e) => update("reporter_phone", e.target.value)}
-                  />
-                </DarkField>
-
-                <DarkField label="Reporter name">
-                  <input
-                    className={darkInput}
-                    placeholder="Optional"
-                    value={formData.reporter_name}
-                    onChange={(e) => update("reporter_name", e.target.value)}
-                  />
-                </DarkField>
-
-                <DarkField error={errors.latitude} label="Latitude">
-                  <input
-                    className={darkInput}
-                    placeholder="Auto-filled by GPS"
-                    step="any"
-                    type="number"
-                    value={formData.latitude}
-                    onChange={(e) => update("latitude", e.target.value)}
-                  />
-                </DarkField>
-
-                <DarkField error={errors.longitude} label="Longitude">
-                  <input
-                    className={darkInput}
-                    placeholder="Auto-filled by GPS"
-                    step="any"
-                    type="number"
-                    value={formData.longitude}
-                    onChange={(e) => update("longitude", e.target.value)}
-                  />
-                </DarkField>
-              </div>
-
-              <div className="mt-4">
-                <DarkField
-                  error={errors.description}
-                  hint="Describe what is blocked, how long, and whether emergency vehicles are affected."
-                  label="Description"
+              <div className="p-5 space-y-4">
+                <F
+                  label="What is happening on the road?"
                   required
+                  hint="Describe what is blocked, how long, and if emergency vehicles are affected. Kannada supported."
+                  error={errors.description}
                 >
                   <textarea
-                    className={`${darkInput} min-h-[120px] resize-y`}
-                    placeholder="e.g. Large gathering near Trinity Circle has blocked the left turn. Buses are stuck and traffic backing up toward MG Road."
-                    value={formData.description}
-                    onChange={(e) => update("description", e.target.value)}
+                    className={`${inp} min-h-[130px] resize-y`}
+                    disabled={submitting}
+                    placeholder={"e.g. Heavy truck stalled near Hebbal flyover blocking two lanes.\n\nKannada: ಮರ ಬಿದ್ದಿದೆ ರಸ್ತೆ ಬ್ಲಾಕ್ ಆಗಿದೆ"}
+                    value={form.description}
+                    onChange={(e) => set("description", e.target.value)}
                   />
-                </DarkField>
-              </div>
+                </F>
 
-              {errorMessage ? (
-                <div className="mt-4 flex items-center gap-2 rounded border border-[#e05252]/40 bg-[#e05252]/10 px-4 py-3 text-[13px] text-[#e05252]">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  {errorMessage}
+                <div className="hidden">
+                  <input className={inp} disabled={submitting} placeholder="9876543210" value={form.reporter_phone} onChange={(e) => set("reporter_phone", e.target.value)} />
                 </div>
-              ) : null}
 
-              <button
-                className="mt-5 inline-flex items-center gap-2 rounded bg-[#e8a034] px-5 py-2.5 text-[13px] font-semibold text-[#0a0c0f] transition hover:bg-[#f0b75d] disabled:opacity-60"
-                disabled={isSubmitting}
-                type="submit"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
+                {errMsg && (
+                  <div className="flex items-center gap-2 rounded border-2 border-[#EF4444]/30 bg-[#EF4444]/10 px-4 py-3 text-[13px] font-semibold text-[#EF4444]">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />{errMsg}
+                  </div>
                 )}
-                {isSubmitting ? "Transmitting…" : "Submit to police"}
-              </button>
+
+                <button className="btn-primary mt-1 w-full justify-center" disabled={submitting} type="submit">
+                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {submitting ? "Transmitting…" : "Submit to police"}
+                  {!submitting && <ArrowRight className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
+
           </form>
 
-          {/* ── Sidebar ──────────────────────────────────────────────────────── */}
+          {/* Right sidebar */}
           <div className="space-y-5">
 
-            {/* Incident type context */}
-            <div className="command-panel p-5">
-              <div className="panel-title mb-4">
-                <ShieldAlert className="h-3.5 w-3.5 text-[#e8a034]" />
-                Incident signal preview
+            {/* Completion */}
+            <div className="browser-card">
+              <div className="browser-card-header border-b-2 border-[#252535]">
+                <span className="browser-dot browser-dot-red" />
+                <span className="browser-dot browser-dot-yellow" />
+                <span className="browser-dot browser-dot-green" />
+                <span className="ml-3 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#FFE600]">INTAKE COMPLETENESS</span>
+                <span className={`ml-auto rounded border px-2 py-0.5 font-mono text-[9px] font-black uppercase ${completion >= 90 ? "border-[#10B981]/30 bg-[#10B981]/10 text-[#10B981]" : "border-[#FFE600]/30 bg-[#FFE600]/10 text-[#FFE600]"}`}>
+                  {completion >= 90 ? "READY" : "NEEDS DETAILS"}
+                </span>
               </div>
-              <div className="space-y-3">
-                <PreviewRow
-                  label="Type"
-                  value={complaintTypeLabels[formData.complaint_type]}
-                  accent="text-[#e8a034]"
-                />
-                <PreviewRow
-                  label="Context"
-                  value={complaintTypeDescriptions[formData.complaint_type]}
-                  accent="text-[#9ba5b3]"
-                />
-                <PreviewRow
-                  label="Severity"
-                  value="Auto-assessed by DRISHTI ML model on submission"
-                  accent="text-[#19b7a5]"
-                />
-                <PreviewRow
-                  label="Zone / Corridor"
-                  value={[formData.zone, formData.corridor].filter(Boolean).join(" / ") || "Not yet selected"}
-                  accent="text-[#9ba5b3]"
-                />
-                {formData.latitude && formData.longitude ? (
-                  <PreviewRow
-                    label="Coordinates"
-                    value={`${Number(formData.latitude).toFixed(5)}, ${Number(formData.longitude).toFixed(5)}`}
-                    accent="text-[#35b779]"
-                  />
-                ) : (
-                  <PreviewRow
-                    label="Coordinates"
-                    value="GPS not captured — geocoded from location name"
-                    accent="text-[#505866]"
-                  />
-                )}
+              <div className="p-5">
+                <div className="font-mono text-[48px] font-black leading-none text-[#F0F0F8]">
+                  {completion}<span className="text-[20px] text-[#8888A0]">%</span>
+                </div>
+                <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-[#252535]">
+                  <div className="progress-fill" style={{ '--progress': `${completion}%` } as React.CSSProperties} />
+                </div>
+                <div className="mt-4 space-y-2">
+                  {[
+                    { label: "Nearest location", done: Boolean(form.location_text.trim()) },
+                    { label: "Current GPS (optional)", done: Boolean(form.latitude && form.longitude) },
+                    { label: "Detailed description", done: form.description.trim().length >= 20 },
+                  ].map((row) => (
+                    <div className={`flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.06em] ${row.done ? "text-[#10B981]" : "text-[#444455]"}`} key={row.label}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${row.done ? "bg-[#10B981]" : "bg-[#444455]"}`} />
+                      {row.label}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
-            {/* Confirmed submission */}
-            {result ? (
-              <div className={`command-panel border ${sevConfig?.border ?? ""} p-5`}>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-[#35b779]" />
-                  <div className="text-[14px] font-semibold text-[#f5f7fb]">Complaint received</div>
-                </div>
-
-                <div className="mt-4 rounded border border-[#252b35] bg-[#10141b] p-3">
-                  <div className="section-kicker mb-1">Tracking token</div>
-                  <div className="font-mono text-[18px] font-bold text-[#e8a034]">{result.tracking_id}</div>
-                </div>
-
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <div className="rounded border border-[#252b35] bg-[#10141b] p-3">
-                    <div className="section-kicker mb-1">AI severity</div>
-                    <div className={`font-semibold ${sevConfig?.color ?? ""}`}>{result.severity}</div>
-                  </div>
-                  <div className="rounded border border-[#252b35] bg-[#10141b] p-3">
-                    <div className="section-kicker mb-1">Status</div>
-                    <div className="text-[12px] font-semibold text-[#f5f7fb]">{result.status}</div>
+            {/* Success card */}
+            {result && (
+              <div className="browser-card border-2 border-[#10B981]/30">
+                <div className="browser-card-header border-b-2 border-[#10B981]/30">
+                  <span className="browser-dot browser-dot-red" />
+                  <span className="browser-dot browser-dot-yellow" />
+                  <span className="browser-dot browser-dot-green" />
+                  <div className="ml-3 flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#10B981]">
+                    <CheckCircle2 className="h-3 w-3" /> Complaint Received
                   </div>
                 </div>
-
-                <div className="mt-4 flex flex-col gap-2">
-                  <a
-                    className="inline-flex items-center justify-center gap-2 rounded bg-[#35b779] px-4 py-2 text-[12px] font-semibold text-[#0a0c0f] transition hover:bg-[#3ecf8e]"
-                    href={`https://wa.me/?text=${encodeURIComponent(
-                      `DRISHTI complaint registered. Token: ${result.tracking_id}. Track: http://localhost:3000/citizen/track?token=${result.tracking_id}`
-                    )}`}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Share on WhatsApp
-                  </a>
-                  <Link
-                    className="inline-flex items-center justify-center gap-2 rounded border border-[#252b35] px-4 py-2 text-[12px] font-semibold text-[#dce2ea] transition hover:bg-[#141820]"
-                    href={`/citizen/track?token=${encodeURIComponent(result.tracking_id)}`}
-                  >
-                    Track this complaint
-                  </Link>
+                <div className="p-5">
+                  <div className="rounded border-2 border-[#252535] bg-[#08080F] p-3">
+                    <div className="text-[9px] font-black uppercase tracking-[0.18em] text-[#444455]">Tracking Token</div>
+                    <div className="mt-1 font-mono text-[20px] font-black text-[#FFE600]">{result.tracking_id}</div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="rounded border-2 border-[#252535] bg-[#08080F] p-3">
+                      <div className="text-[9px] font-black uppercase tracking-[0.18em] text-[#444455]">AI Severity</div>
+                      <div className={`mt-1 text-[13px] font-black uppercase ${result.severity === "Critical" ? "text-[#EF4444]" : result.severity === "High" ? "text-[#F59E0B]" : result.severity === "Medium" ? "text-[#3B82F6]" : "text-[#10B981]"}`}>
+                        {result.severity}
+                      </div>
+                    </div>
+                    <div className="rounded border-2 border-[#252535] bg-[#08080F] p-3">
+                      <div className="text-[9px] font-black uppercase tracking-[0.18em] text-[#444455]">Status</div>
+                      <div className="mt-1 text-[12px] font-bold text-[#F0F0F8]">{result.status}</div>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-col gap-2">
+                    <a
+                      className="btn-primary justify-center"
+                      href={`https://wa.me/?text=${encodeURIComponent(`DRISHTI complaint registered. Token: ${result.tracking_id}. Track: http://localhost:3000/citizen/track?token=${result.tracking_id}`)}`}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Share on WhatsApp <ArrowRight className="h-4 w-4" />
+                    </a>
+                    <Link className="btn-ghost justify-center" href={`/citizen/track?token=${encodeURIComponent(result.tracking_id)}`}>
+                      Track this complaint
+                    </Link>
+                  </div>
                 </div>
               </div>
-            ) : null}
+            )}
 
             {/* What happens next */}
-            <div className="command-panel p-5">
-              <div className="panel-title mb-4">
-                <Radio className="h-3.5 w-3.5 text-[#e8a034]" />
-                What happens next
+            <div className="browser-card">
+              <div className="browser-card-header border-b-2 border-[#252535]">
+                <span className="browser-dot browser-dot-red" />
+                <span className="browser-dot browser-dot-yellow" />
+                <span className="browser-dot browser-dot-green" />
+                <div className="ml-3 flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#444455]">
+                  <Radio className="h-3 w-3" /> What happens next
+                </div>
               </div>
-              <div className="space-y-3">
+              <div className="p-5 space-y-4">
                 {[
-                  { n: "01", t: "Queue entry", d: "Complaint enters the police dispatch queue with a unique tracking token." },
-                  { n: "02", t: "AI triage",   d: "DRISHTI ML model scores severity and generates a dispatch recommendation." },
-                  { n: "03", t: "Field deploy", d: "Command Centre links to nearest officer and issues a duty order." },
-                ].map((step) => (
-                  <div className="flex items-start gap-3" key={step.n}>
-                    <div className="mono-id mt-0.5 shrink-0 text-[#e8a034]">{step.n}</div>
+                  { n: "01", t: "Description validation", d: "The system checks that the report describes a real traffic incident." },
+                  { n: "02", t: "NLP extraction", d: "Cause, vehicles, road impact, and urgency are derived from your words." },
+                  { n: "03", t: "Police workflow", d: "Command reviews the structured case and manages assignment through resolution." },
+                ].map((s) => (
+                  <div className="flex items-start gap-3" key={s.n}>
+                    <div className="font-mono text-[11px] font-black text-[#FFE600] shrink-0 mt-0.5">{s.n}</div>
                     <div>
-                      <div className="text-[12px] font-semibold text-[#f5f7fb]">{step.t}</div>
-                      <div className="mt-0.5 text-[11px] text-[#707987]">{step.d}</div>
+                      <div className="text-[12px] font-black uppercase tracking-[0.04em] text-[#F0F0F8]">{s.t}</div>
+                      <div className="mt-0.5 text-[11px] text-[#8888A0]">{s.d}</div>
                     </div>
                   </div>
                 ))}
@@ -601,56 +415,20 @@ export default function CitizenGrievancePage() {
   );
 }
 
-// ── Dark-themed form primitives ───────────────────────────────────────────────
-const darkInput =
-  "w-full rounded border border-[#252b35] bg-[#10141b] px-3 py-2 text-[13px] text-[#dce2ea] placeholder-[#505866] outline-none focus:border-[#e8a034]/50 focus:ring-1 focus:ring-[#e8a034]/20 transition";
+const inp = "w-full rounded border-2 border-[#252535] bg-[#08080F] px-3 py-2.5 text-[13px] text-[#F0F0F8] placeholder-[#444455] outline-none focus:border-[#FFE600] focus:shadow-[0_0_0_3px_rgba(255,230,0,0.08)] transition disabled:opacity-50";
 
-const darkSelect =
-  "w-full rounded border border-[#252b35] bg-[#10141b] px-3 py-2 text-[13px] text-[#dce2ea] outline-none focus:border-[#e8a034]/50 focus:ring-1 focus:ring-[#e8a034]/20 transition";
-
-function DarkField({
-  label,
-  required,
-  error,
-  hint,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  error?: string;
-  hint?: string;
-  children: React.ReactNode;
+function F({ label, required, error, hint, children }: {
+  label: string; required?: boolean; error?: string; hint?: string; children: React.ReactNode;
 }) {
   return (
     <div>
-      <label className="mb-1.5 flex items-center gap-1 text-[12px] font-medium text-[#9ba5b3]">
-        {label}
-        {required && <span className="text-[#e8a034]">*</span>}
+      <label className="mb-1.5 flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.14em] text-[#8888A0]">
+        {label}{required && <span className="text-[#FFE600]">*</span>}
       </label>
       {children}
-      {error ? (
-        <div className="mt-1 text-[11px] text-[#e05252]">{error}</div>
-      ) : hint ? (
-        <div className="mt-1 text-[11px] text-[#505866]">{hint}</div>
-      ) : null}
+      {error  ? <div className="mt-1 text-[11px] font-semibold text-[#EF4444]">{error}</div>
+              : hint ? <div className="mt-1 text-[11px] text-[#444455]">{hint}</div>
+              : null}
     </div>
   );
 }
-
-function PreviewRow({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent?: string;
-}) {
-  return (
-    <div className="border-b border-[#1e2430] pb-2.5 last:border-0 last:pb-0">
-      <div className="section-kicker mb-1">{label}</div>
-      <div className={`text-[12px] ${accent ?? "text-[#dce2ea]"}`}>{value}</div>
-    </div>
-  );
-}
-

@@ -45,14 +45,19 @@ export default function OperatorPage() {
     return () => window.clearInterval(id);
   }, []);
 
-  const summary = useMemo(() => ({
-    critical:   grievances.filter((g) => g.severity === "Critical").length,
-    high:       grievances.filter((g) => g.severity === "High").length,
-    inProgress: grievances.filter((g) => g.status === "in_progress" || g.status === "In Progress").length,
-    total:      grievances.length,
-  }), [grievances]);
+  const activeGrievances = useMemo(
+    () => grievances.filter((g) => g.status !== "resolved"),
+    [grievances],
+  );
 
-  const urgentItems = grievances
+  const summary = useMemo(() => ({
+    critical:   activeGrievances.filter((g) => g.severity === "Critical").length,
+    high:       activeGrievances.filter((g) => g.severity === "High").length,
+    inProgress: activeGrievances.filter((g) => g.status === "in_progress" || g.status === "In Progress").length,
+    total:      activeGrievances.length,
+  }), [activeGrievances]);
+
+  const urgentItems = activeGrievances
     .filter((g) => g.severity === "Critical" || g.severity === "High")
     .slice(0, 6);
 

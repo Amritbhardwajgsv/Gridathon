@@ -13,131 +13,175 @@ import {
   Users,
   Zap,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
+
+import DescriptionPipelinePreview from "@/components/DescriptionPipelinePreview";
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-[#060c18] text-[#dde8f5] overflow-x-hidden">
+    <main className="min-h-screen bg-[#08080F] text-[#F0F0F8] overflow-x-hidden">
 
       {/* ── Navbar ──────────────────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 border-b border-[#1c2e4a] bg-[#060c18]/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-3.5">
+      <nav className="sticky top-0 z-50 border-b-2 border-[#252535] bg-[#08080F]/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link className="flex items-center gap-3" href="/">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-[#0ea5c5] to-[#2d6ce0]">
-              <Radio className="h-4 w-4 text-white" />
-              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#060c18] bg-[#10b981]" />
+            <div className="flex h-9 w-9 items-center justify-center rounded bg-[#FFE600]">
+              <Radio className="h-4 w-4 text-[#08080F]" />
             </div>
             <div>
-              <div className="font-mono text-[13px] font-bold tracking-[0.18em] text-[#22d3ee]">DRISHTI</div>
-              <div className="mono-id leading-none">Bengaluru Police · Traffic Ops</div>
+              <div className="font-mono text-[13px] font-bold tracking-[0.22em] text-[#FFE600]">DRISHTI</div>
+              <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#444455]">Bengaluru Police · Traffic Ops</div>
             </div>
           </Link>
 
           <div className="flex items-center gap-1">
-            <Link className="px-3 py-2 text-[12px] text-[#7c9ab8] transition hover:text-[#dde8f5]" href="/citizen/grievance">
+            <Link className="px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-[#8888A0] transition hover:text-[#F0F0F8]" href="/citizen/grievance">
               Report
             </Link>
-            <Link className="px-3 py-2 text-[12px] text-[#7c9ab8] transition hover:text-[#dde8f5]" href="/citizen/track">
+            <Link className="px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-[#8888A0] transition hover:text-[#F0F0F8]" href="/citizen/track">
               Track
             </Link>
             <Link
-              className="ml-2 inline-flex items-center gap-1.5 rounded-lg border border-[#1c2e4a] px-4 py-2 text-[12px] font-medium text-[#7c9ab8] transition hover:border-[#243a5c] hover:text-[#dde8f5]"
+              className="ml-2 inline-flex items-center gap-1.5 rounded border-2 border-[#252535] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#8888A0] transition hover:border-[#FFE600] hover:text-[#FFE600]"
               href="/register"
             >
               Request Access
             </Link>
             <Link
-              className="ml-1 inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[#0ea5c5] to-[#2d6ce0] px-4 py-2 text-[12px] font-semibold text-white transition hover:opacity-90"
+              className="ml-1 btn-primary text-[11px]"
               href="/login"
             >
               Police Login
-              <ArrowRight className="h-3 w-3" />
+              <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
         </div>
       </nav>
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden border-b border-[#1c2e4a] px-5 pb-24 pt-20">
-        {/* Background city map */}
-        <div className="pointer-events-none absolute inset-0 opacity-30">
-          <Image src="/hero-city.svg" alt="" fill className="object-cover" priority />
-        </div>
-        {/* Grid overlay */}
-        <div className="grid-overlay pointer-events-none absolute inset-0" />
-        {/* Radial glow center */}
-        <div className="pointer-events-none absolute left-1/2 top-1/2 h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(34,211,238,0.08)_0%,transparent_70%)]" />
+      <section className="relative overflow-hidden border-b-2 border-[#252535] px-6 pb-24 pt-20">
+        <div className="grid-overlay pointer-events-none absolute inset-0 opacity-[0.03]" />
+        <div className="pointer-events-none absolute left-1/2 top-1/2 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,230,0,0.04)_0%,transparent_65%)]" />
 
         <div className="reveal-up relative mx-auto max-w-7xl">
-          <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_460px]">
+          <div className="grid gap-14 lg:grid-cols-[minmax(0,1fr)_480px]">
             <div className="flex flex-col justify-center">
-              <div className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-[#22d3ee]/25 bg-[#22d3ee]/8 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#22d3ee]">
-                <span className="live-breathe h-1.5 w-1.5 rounded-full bg-[#22d3ee]" />
+
+              {/* Live badge */}
+              <div className="mb-8 inline-flex w-fit items-center gap-2.5 rounded-full border-2 border-[#FFE600]/25 bg-[#FFE600]/8 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#FFE600]">
+                <span className="live-breathe h-2 w-2 rounded-full bg-[#FFE600]" />
                 Bengaluru Police · Active Operations
               </div>
 
-              <h1 className="text-[44px] font-bold leading-[1.05] tracking-tight md:text-[60px]">
-                <span className="text-[#f0f6ff]">Dynamic Resource</span><br />
-                <span className="gradient-text">Intelligence</span>{" "}
-                <span className="text-[#f0f6ff]">for</span><br />
-                <span className="text-[#f0f6ff]">Traffic Operations</span>
+              <div className="typing-shell mb-5" aria-label="AI sees the signal. Teams move.">
+                <span className="typing-text">AI sees the signal. Teams move.</span>
+              </div>
+
+              {/* Main headline */}
+              <h1 className="text-[48px] font-black leading-[0.96] tracking-[-0.02em] md:text-[68px] uppercase">
+                <span className="block text-[#F0F0F8]">Dynamic</span>
+                <span className="block text-[#FFE600]">Resource</span>
+                <span className="block text-[#F0F0F8]">Intelligence.</span>
               </h1>
 
-              <p className="mt-6 max-w-xl text-[15px] leading-7 text-[#7c9ab8]">
-                DRISHTI is Bengaluru Police&apos;s ML-powered platform — RandomForest
-                models predict incident severity and duration, GPS dispatch assigns
-                nearest officers in seconds, and field teams report status in real time.
+              <p className="mt-7 max-w-lg text-[15px] leading-7 text-[#8888A0]">
+                Describe the traffic problem in detail. DRISHTI extracts the operational
+                fields, assesses urgency, and prepares the incident for police action.
+                Citizens explain what happened; the command team handles the rest.
               </p>
 
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Link className="btn-primary text-[13px]" href="/login">
+              {/* CTA row */}
+              <div className="mt-9 flex flex-wrap gap-3">
+                <Link className="btn-primary" href="/login">
                   <ShieldCheck className="h-4 w-4" />
                   Police Login
+                  <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
-                <Link className="btn-ghost text-[13px]" href="/citizen/grievance">
+                <Link className="btn-ghost" href="/citizen/grievance">
                   <MessageSquareWarning className="h-4 w-4" />
                   Report Incident
                 </Link>
-                <Link className="btn-ghost text-[13px]" href="/citizen/track">
+                <Link className="btn-ghost" href="/citizen/track">
                   <ClipboardList className="h-4 w-4" />
                   Track Complaint
                 </Link>
               </div>
 
               {/* Stats strip */}
-              <div className="mt-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="mt-12 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {[
-                  { v: "2",     l: "ML Models",      s: "Severity · Duration" },
-                  { v: "22+",   l: "BTP Corridors",  s: "ORR · CBD · Hosur" },
-                  { v: "4",     l: "Severity Levels", s: "Critical to Low" },
-                  { v: "<200ms",l: "API Latency",    s: "End-to-end predict" },
+                  { v: "1",   l: "Input",           s: "Detailed description" },
+                  { v: "NLP", l: "Auto Extraction", s: "Structured incident fields" },
+                  { v: "AI",  l: "Assessment",      s: "Priority and resources" },
+                  { v: "24/7", l: "Police Workflow", s: "Review to resolution" },
                 ].map((stat) => (
-                  <div className="rounded-lg border border-[#1c2e4a] bg-[#0d1629]/70 px-4 py-3" key={stat.l}>
-                    <div className="font-mono text-[22px] font-bold text-[#22d3ee]">{stat.v}</div>
-                    <div className="mt-0.5 text-[11px] font-semibold text-[#dde8f5]">{stat.l}</div>
-                    <div className="mt-0.5 text-[10px] text-[#3d5278]">{stat.s}</div>
+                  <div className="rounded border-2 border-[#252535] bg-[#0F0F1A] px-4 py-3" key={stat.l}>
+                    <div className="font-mono text-[22px] font-bold text-[#FFE600]">{stat.v}</div>
+                    <div className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.06em] text-[#F0F0F8]">{stat.l}</div>
+                    <div className="mt-0.5 text-[10px] text-[#444455]">{stat.s}</div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Hero image — Bengaluru map */}
+            {/* Hero browser-window card */}
             <div className="flex items-center justify-center">
-              <div className="relative">
-                <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-[#22d3ee]/10 to-[#3b82f6]/10" />
-                <div className="overflow-hidden rounded-2xl border border-[#22d3ee]/20">
-                  <Image src="/hero-city.svg" alt="Bengaluru Traffic Network" width={460} height={280} className="block" />
+              <DescriptionPipelinePreview />
+              <div className="hidden">
+                {/* Browser dots header */}
+                <div className="browser-card-header border-b-2 border-[#252535]">
+                  <span className="browser-dot browser-dot-red" />
+                  <span className="browser-dot browser-dot-yellow" />
+                  <span className="browser-dot browser-dot-green" />
+                  <span className="ml-3 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#444455]">
+                    DRISHTI · COMMAND CENTRE
+                  </span>
+                  <span className="ml-auto flex items-center gap-1.5">
+                    <span className="live-breathe h-1.5 w-1.5 rounded-full bg-[#FFE600]" />
+                    <span className="font-mono text-[9px] text-[#FFE600]">LIVE OPS</span>
+                  </span>
                 </div>
-                {/* Live blip */}
-                <div className="absolute -right-3 -top-3 flex items-center gap-2 rounded-lg border border-[#1c2e4a] bg-[#0d1629] px-3 py-1.5 shadow-xl">
-                  <span className="live-breathe h-2 w-2 rounded-full bg-[#22d3ee]" />
-                  <span className="mono-id text-[#22d3ee]">LIVE OPS</span>
-                </div>
-                {/* ML badge */}
-                <div className="absolute -bottom-3 -left-3 flex items-center gap-2 rounded-lg border border-[#1c2e4a] bg-[#0d1629] px-3 py-1.5 shadow-xl">
-                  <BrainCircuit className="h-3.5 w-3.5 text-[#a78bfa]" />
-                  <span className="mono-id text-[#a78bfa]">RF CLASSIFIER · ACTIVE</span>
+
+                {/* Simulated dashboard preview */}
+                <div className="p-5 space-y-3">
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: "Critical", val: "3", color: "text-[#EF4444]", bg: "bg-[#EF4444]/10" },
+                      { label: "Deployed", val: "12", color: "text-[#FFE600]", bg: "bg-[#FFE600]/10" },
+                      { label: "Resolved", val: "47", color: "text-[#10B981]", bg: "bg-[#10B981]/10" },
+                    ].map((s) => (
+                      <div className={`rounded border-2 border-[#252535] p-3 ${s.bg}`} key={s.label}>
+                        <div className={`font-mono text-[22px] font-bold ${s.color}`}>{s.val}</div>
+                        <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-[#8888A0]">{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {[
+                    { id: "DRS-A3C9", loc: "Trinity Circle", sev: "Critical", color: "text-[#EF4444]", dot: "bg-[#EF4444]" },
+                    { id: "DRS-B7E2", loc: "Silk Board Jn", sev: "High",     color: "text-[#F59E0B]", dot: "bg-[#F59E0B]" },
+                    { id: "DRS-F1D4", loc: "Hebbal Flyover",  sev: "Medium",   color: "text-[#3B82F6]", dot: "bg-[#3B82F6]" },
+                  ].map((item) => (
+                    <div className="flex items-center justify-between rounded border-2 border-[#252535] bg-[#0F0F1A] px-4 py-3" key={item.id}>
+                      <div className="flex items-center gap-3">
+                        <span className={`h-2 w-2 rounded-full ${item.dot}`} />
+                        <div>
+                          <div className="font-mono text-[10px] text-[#444455]">{item.id}</div>
+                          <div className="text-[12px] font-semibold text-[#F0F0F8]">{item.loc}</div>
+                        </div>
+                      </div>
+                      <span className={`rounded border border-current/30 px-2 py-0.5 text-[9px] font-bold uppercase ${item.color}`}>
+                        {item.sev}
+                      </span>
+                    </div>
+                  ))}
+
+                  <div className="rounded border-2 border-[#FFE600]/20 bg-[#FFE600]/5 px-4 py-3 flex items-center gap-3">
+                    <BrainCircuit className="h-4 w-4 text-[#FFE600] shrink-0" />
+                    <div className="text-[11px] font-semibold text-[#FFE600]">
+                      Description processing
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -145,30 +189,92 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── How it works ─────────────────────────────────────────────────────── */}
-      <section className="border-b border-[#1c2e4a] px-5 py-20">
+      {/* ── ADL-style yellow search bar CTA ─────────────────────────────────── */}
+      <section className="border-b-2 border-[#252535] px-6 py-10">
+        <div className="mx-auto max-w-4xl">
+          <div className="flex items-center gap-4 rounded-full border-2 border-[#FFE600] bg-[#FFE600] px-6 py-4">
+            <Siren className="h-5 w-5 text-[#08080F] shrink-0" />
+            <span className="flex-1 font-mono text-[13px] font-bold uppercase tracking-[0.12em] text-[#08080F]">
+              WHAT HAPPENS WHEN A TRAFFIC CRISIS HITS A CITY OF 10 MILLION?
+            </span>
+            <Link
+              href="/citizen/grievance"
+              className="shrink-0 rounded-full border-2 border-[#08080F] bg-[#08080F] px-5 py-2 text-[11px] font-black uppercase tracking-[0.1em] text-[#FFE600] transition hover:bg-[#0F0F1A]"
+            >
+              Report Now →
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* News clippings */}
+      <section className="border-b-2 border-[#252535] px-6 py-20">
         <div className="mx-auto max-w-7xl">
-          <div className="mb-12 text-center">
-            <div className="section-kicker mb-3 text-[#22d3ee]">Operational Workflow</div>
-            <h2 className="text-[32px] font-bold text-[#f0f6ff]">From signal to field resolution</h2>
-            <p className="mx-auto mt-3 max-w-xl text-[14px] leading-7 text-[#7c9ab8]">
-              Every traffic event flows through a four-phase ML pipeline with automated decisions at each step.
+          <div className="mb-10 flex flex-wrap items-end justify-between gap-5">
+            <div>
+              <div className="section-kicker mb-3 text-[#f47f5f]">+ In the news</div>
+              <h2 className="text-[36px] font-black uppercase leading-[1.02] tracking-[-0.01em] text-[#F0F0F8]">
+                Bengaluru traffic<br />is the headline.
+              </h2>
+            </div>
+            <p className="max-w-md text-[14px] leading-7 text-[#8888A0]">
+              Congestion costs commuters time every day and makes faster,
+              description-led traffic response essential.
             </p>
+          </div>
+
+          <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(300px,0.72fr)_minmax(0,1.28fr)]">
+            <article className="browser-card overflow-hidden border-[#f47f5f]/25 bg-[#fff8f2] p-3 sm:p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <span className="section-kicker text-[#f47f5f]">News clipping 01</span>
+                <span className="rounded-full bg-[#FFE600]/20 px-3 py-1 font-mono text-[9px] font-bold uppercase text-[#795b4e]">Congestion index</span>
+              </div>
+              <div className="flex min-h-[520px] items-center justify-center overflow-hidden rounded-xl bg-black sm:min-h-[620px]">
+                <img alt="News clipping reporting Bengaluru as the world's second most congested city" className="max-h-[620px] w-full object-contain" loading="lazy" src="/news/bengaluru-congestion-headline.png" />
+              </div>
+            </article>
+
+            <article className="browser-card overflow-hidden border-[#FFE600]/35 bg-[#fff8f2] p-3 sm:p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <span className="section-kicker text-[#f47f5f]">News clipping 02</span>
+                <span className="rounded-full bg-[#f47f5f]/10 px-3 py-1 font-mono text-[9px] font-bold uppercase text-[#d66a45]">City mobility</span>
+              </div>
+              <div className="flex min-h-[300px] items-center justify-center overflow-hidden rounded-xl bg-[#111827] sm:min-h-[420px] lg:h-[620px]">
+                <img alt="Television news clipping about Bengaluru being the second most congested city globally" className="max-h-[620px] w-full object-contain" loading="lazy" src="/news/bengaluru-congestion-broadcast.png" />
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      {/* ── How it works ─────────────────────────────────────────────────────── */}
+      <section className="border-b-2 border-[#252535] px-6 py-20">
+        <div className="mx-auto max-w-7xl">
+          <div className="mb-12">
+            <div className="section-kicker mb-3 text-[#FFE600]">+ Operational Workflow</div>
+            <h2 className="text-[36px] font-black uppercase leading-[1.0] tracking-[-0.01em] text-[#F0F0F8]">
+              From signal to<br />field resolution.
+            </h2>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {[
-              { n: "01", phase: "Citizen Signal",    desc: "A report enters the queue. DRISHTI AI auto-scores severity using the RF classifier and generates a dispatch recommendation.",  color: "text-[#22d3ee]", bg: "bg-[#22d3ee]/10", border: "border-[#22d3ee]/20" },
-              { n: "02", phase: "ML Forecast",       desc: "RandomForest predicts blockage duration and exact resource requirement — personnel strength, barricades, tow units.",           color: "text-[#3b82f6]", bg: "bg-[#3b82f6]/10", border: "border-[#3b82f6]/20" },
-              { n: "03", phase: "Nearest Dispatch",  desc: "GPS haversine match finds closest available officers. One click creates the duty order and issues the field brief.",             color: "text-[#a78bfa]", bg: "bg-[#a78bfa]/10", border: "border-[#a78bfa]/20" },
-              { n: "04", phase: "Field Execution",   desc: "Officers report En Route → On Scene → Resolved via the field dashboard. Status syncs to Command in real time.",                color: "text-[#10b981]", bg: "bg-[#10b981]/10", border: "border-[#10b981]/20" },
+              { n: "01", phase: "Describe the problem", desc: "The citizen writes one detailed account of what is happening. No technical fields or operational decisions are required.", color: "text-[#FFE600]", border: "border-[#FFE600]/30", dot: "bg-[#FFE600]" },
+              { n: "02", phase: "NLP extraction", desc: "DRISHTI reads the description and derives cause, vehicle type, road impact, urgency, and other structured fields.", color: "text-[#22D3EE]", border: "border-[#22D3EE]/30", dot: "bg-[#22D3EE]" },
+              { n: "03", phase: "Police action", desc: "The structured incident reaches Command for review, resource planning, assignment, and field instructions.", color: "text-[#A78BFA]", border: "border-[#A78BFA]/30", dot: "bg-[#A78BFA]" },
+              { n: "04", phase: "Resolve and learn", desc: "Officers manage the incident through resolution. Completed cases feed the controlled weekly retraining cycle.", color: "text-[#10B981]", border: "border-[#10B981]/30", dot: "bg-[#10B981]" },
             ].map((step) => (
-              <div className={`cmd-card border ${step.border} p-6`} key={step.n}>
-                <div className={`inline-flex h-10 w-10 items-center justify-center rounded-lg font-mono text-[13px] font-bold ${step.bg} ${step.color}`}>
-                  {step.n}
+              <div className={`browser-card border-2 ${step.border}`} key={step.n}>
+                <div className="browser-card-header border-b-2 border-[#252535]">
+                  <span className="browser-dot browser-dot-red" />
+                  <span className="browser-dot browser-dot-yellow" />
+                  <span className="browser-dot browser-dot-green" />
                 </div>
-                <div className={`mt-5 text-[11px] font-bold uppercase tracking-[0.1em] ${step.color}`}>{step.phase}</div>
-                <p className="mt-2 text-[13px] leading-6 text-[#7c9ab8]">{step.desc}</p>
+                <div className="p-5">
+                  <div className={`font-mono text-[32px] font-black ${step.color}`}>{step.n}</div>
+                  <div className={`mt-3 text-[10px] font-black uppercase tracking-[0.14em] ${step.color}`}>{step.phase}</div>
+                  <p className="mt-2 text-[13px] leading-6 text-[#8888A0]">{step.desc}</p>
+                </div>
               </div>
             ))}
           </div>
@@ -176,76 +282,121 @@ export default function HomePage() {
       </section>
 
       {/* ── ML models section ────────────────────────────────────────────────── */}
-      <section className="border-b border-[#1c2e4a] px-5 py-20">
+      <section className="border-b-2 border-[#252535] px-6 py-20">
         <div className="mx-auto max-w-7xl">
-          <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="grid items-center gap-14 lg:grid-cols-[minmax(0,1fr)_420px]">
             <div>
-              <div className="section-kicker mb-3 text-[#22d3ee]">Machine Learning Core</div>
-              <h2 className="text-[32px] font-bold text-[#f0f6ff]">
-                Two RandomForest models.<br />
-                <span className="gradient-text">Real-time predictions.</span>
+              <div className="section-kicker mb-3 text-[#FFE600]">+ Machine Learning Core</div>
+              <h2 className="text-[36px] font-black uppercase leading-[1.0] tracking-[-0.01em] text-[#F0F0F8]">
+                One description.<br />
+                <span className="text-[#FFE600]">Structured operational</span><br />
+                intelligence.
               </h2>
-              <p className="mt-4 text-[14px] leading-7 text-[#7c9ab8]">
-                Trained on Bengaluru&apos;s Astram event dataset. Features include corridor, zone,
-                event type, road closure flag, and time-of-day. Predicts in under 200ms.
+              <p className="mt-5 text-[14px] leading-7 text-[#8888A0]">
+                Citizens provide the detail they know in natural language. NLP converts it
+                into consistent incident fields, then the prediction and recommendation
+                pipeline prepares it for police review and action.
               </p>
 
               <div className="mt-8 space-y-4">
                 {[
-                  { title: "Severity Classifier", sub: "RandomForestClassifier · 300 estimators", labels: ["Critical","High","Medium","Low"], colors: ["bg-[#ef4444]","bg-[#f59e0b]","bg-[#3b82f6]","bg-[#10b981]"] },
-                  { title: "Duration Regressor",  sub: "RandomForestRegressor · 300 estimators",  labels: ["Minutes"],                       colors: ["bg-[#22d3ee]"] },
+                  { title: "NLP Field Extraction", sub: "Description to structured incident", labels: ["Cause","Vehicle","Road impact","Urgency"], colors: ["bg-[#FFE600]","bg-[#f47f5f]","bg-[#FFE600]","bg-[#f47f5f]"] },
+                  { title: "Command Preparation", sub: "Assessment and recommendation", labels: ["Priority","Resources","Dispatch brief"], colors: ["bg-[#FFE600]","bg-[#f47f5f]","bg-[#FFE600]"] },
                 ].map((model) => (
-                  <div className="cmd-card p-5" key={model.title}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-[13px] font-semibold text-[#f0f6ff]">{model.title}</div>
-                        <div className="mono-id mt-1">{model.sub}</div>
-                      </div>
-                      <BrainCircuit className="h-4 w-4 shrink-0 text-[#a78bfa]" />
+                  <div className="browser-card" key={model.title}>
+                    <div className="browser-card-header border-b-2 border-[#252535]">
+                      <span className="browser-dot" style={{ background: "#FF5F57" }} />
+                      <span className="browser-dot" style={{ background: "#FEBC2E" }} />
+                      <span className="browser-dot" style={{ background: "#28C840" }} />
+                      <span className="ml-3 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-[#444455]">{model.sub}</span>
                     </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {model.labels.map((l, i) => (
-                        <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase text-[#060c18] ${model.colors[i] ?? "bg-[#22d3ee]"}`} key={l}>
-                          {l}
-                        </span>
-                      ))}
+                    <div className="p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="text-[14px] font-black uppercase tracking-[0.04em] text-[#F0F0F8]">{model.title}</div>
+                        <BrainCircuit className="h-4 w-4 shrink-0 text-[#FFE600]" />
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {model.labels.map((l, i) => (
+                          <span className={`rounded px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.06em] text-[#08080F] ${model.colors[i] ?? "bg-[#FFE600]"}`} key={l}>
+                            {l}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="flex items-center justify-center">
-              <Image src="/ml-visual.svg" alt="ML Neural Net" width={320} height={200} className="opacity-90" />
+            {/* Stylised ML visual */}
+            <div className="browser-card">
+              <div className="browser-card-header border-b-2 border-[#252535]">
+                <span className="browser-dot" style={{ background: "#FF5F57" }} />
+                <span className="browser-dot" style={{ background: "#FEBC2E" }} />
+                <span className="browser-dot" style={{ background: "#28C840" }} />
+                <span className="ml-3 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-[#444455]">MODEL INFERENCE</span>
+              </div>
+              <div className="p-8">
+                <div className="space-y-4">
+                  {[
+                    { label: "Input", val: "One detailed description" },
+                    { label: "Cause", val: "Vehicle breakdown" },
+                    { label: "Vehicle", val: "City bus" },
+                    { label: "Road impact", val: "Two lanes blocked" },
+                  ].map((row) => (
+                    <div className="flex items-center justify-between border-b-2 border-[#252535] pb-3 last:border-0" key={row.label}>
+                      <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#8888A0]">{row.label}</span>
+                      <span className="font-mono text-[12px] font-bold text-[#F0F0F8]">{row.val}</span>
+                    </div>
+                  ))}
+                  <div className="mt-4 rounded border-2 border-[#FFE600]/30 bg-[#FFE600]/8 p-4">
+                    <div className="section-kicker text-[#FFE600]">Command-ready assessment</div>
+                    <div className="mt-2 font-mono text-[24px] font-black text-[#FFE600]">HIGH PRIORITY</div>
+                    <div className="mt-1 text-[12px] text-[#8888A0]">Structured fields and a response brief are ready for police review.</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* ── Capabilities grid ────────────────────────────────────────────────── */}
-      <section className="border-b border-[#1c2e4a] px-5 py-20">
+      <section className="border-b-2 border-[#252535] px-6 py-20">
         <div className="mx-auto max-w-7xl">
-          <div className="mb-12 text-center">
-            <div className="section-kicker mb-3 text-[#22d3ee]">Platform Capabilities</div>
-            <h2 className="text-[32px] font-bold text-[#f0f6ff]">Everything a command room needs</h2>
+          <div className="mb-12">
+            <div className="section-kicker mb-3 text-[#FFE600]">+ Platform Capabilities</div>
+            <h2 className="text-[36px] font-black uppercase leading-[1.0] tracking-[-0.01em] text-[#F0F0F8]">
+              Everything a<br />command room needs.
+            </h2>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
-              { icon: BrainCircuit, title: "ML Severity Assessment",    body: "RandomForest classifier predicts incident severity from complaint type, corridor, zone, and time. Overrides manual guessing.",    accent: "text-[#22d3ee]", bg: "bg-[#22d3ee]/8",  border: "border-[#22d3ee]/15" },
-              { icon: Users,        title: "Nearest-Officer Dispatch",   body: "Haversine GPS matching finds the closest available officers in real time and assigns them with one click.",                          accent: "text-[#10b981]", bg: "bg-[#10b981]/8",  border: "border-[#10b981]/15" },
-              { icon: Activity,     title: "Live Field Tracking",        body: "Officers push GPS every 30s. Command sees availability, last-seen time, and assigned corridor on a live map.",                       accent: "text-[#3b82f6]", bg: "bg-[#3b82f6]/8",  border: "border-[#3b82f6]/15" },
-              { icon: Zap,          title: "Resource Recommendation",    body: "Each prediction returns exact strength: constables, ASIs, SIs, inspectors, barricades, tow units, and medical units.",              accent: "text-[#a78bfa]", bg: "bg-[#a78bfa]/8",  border: "border-[#a78bfa]/15" },
-              { icon: MapPinned,    title: "En Route Navigation",        body: "Field officers see live Mappls route to destination, nearby colleague markers, and a real-time command chat.",                        accent: "text-[#f59e0b]", bg: "bg-[#f59e0b]/8",  border: "border-[#f59e0b]/15" },
-              { icon: MessageSquareWarning, title: "Command Chat",       body: "WebSocket-based live chat between Command Centre and field officers. Full history, reconnect on drop, role-labelled messages.",      accent: "text-[#ef4444]", bg: "bg-[#ef4444]/8",  border: "border-[#ef4444]/15" },
+              { icon: BrainCircuit, title: "Description Intelligence", body: "NLP extracts operational fields directly from the citizen&apos;s detailed description; no technical form-filling is required.", accent: "#FFE600" },
+              { icon: Users,        title: "Nearest-Officer Dispatch",  body: "Haversine GPS matching finds the closest available officers in real time and assigns them with one click.",                         accent: "#10B981" },
+              { icon: Activity,     title: "Live Field Tracking",       body: "Officers push GPS every 30s. Command sees availability, last-seen time, and assigned corridor on a live map.",                        accent: "#3B82F6" },
+              { icon: Zap,          title: "Resource Recommendation",   body: "Each prediction returns exact strength: constables, ASIs, SIs, inspectors, barricades, tow units, and medical units.",               accent: "#A78BFA" },
+              { icon: MapPinned,    title: "En Route Navigation",       body: "Field officers see live Mappls route to destination, nearby colleague markers, and a real-time command chat.",                        accent: "#F59E0B" },
+              { icon: MessageSquareWarning, title: "Command Chat",      body: "WebSocket-based live chat between Command Centre and field officers. Full history, reconnect on drop, role-labelled messages.",       accent: "#E84B5A" },
             ].map((cap) => {
               const Icon = cap.icon;
               return (
-                <div className={`cmd-card border ${cap.border} p-6 transition-all hover:border-opacity-40`} key={cap.title}>
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${cap.bg} ${cap.accent}`}>
-                    <Icon className="h-5 w-5" />
+                <div className="browser-card cmd-card-glow" key={cap.title}>
+                  <div className="browser-card-header border-b-2 border-[#252535]">
+                    <span className="browser-dot" style={{ background: "#FF5F57" }} />
+                    <span className="browser-dot" style={{ background: "#FEBC2E" }} />
+                    <span className="browser-dot" style={{ background: "#28C840" }} />
                   </div>
-                  <h3 className="mt-4 text-[14px] font-semibold text-[#f0f6ff]">{cap.title}</h3>
-                  <p className="mt-2 text-[13px] leading-6 text-[#7c9ab8]">{cap.body}</p>
+                  <div className="p-5">
+                    <div
+                      className="flex h-10 w-10 items-center justify-center rounded"
+                      style={{ background: `${cap.accent}18`, color: cap.accent }}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <h3 className="mt-4 text-[13px] font-black uppercase tracking-[0.04em] text-[#F0F0F8]">{cap.title}</h3>
+                    <p className="mt-2 text-[13px] leading-6 text-[#8888A0]">{cap.body}</p>
+                  </div>
                 </div>
               );
             })}
@@ -254,38 +405,50 @@ export default function HomePage() {
       </section>
 
       {/* ── Role cards ───────────────────────────────────────────────────────── */}
-      <section className="border-b border-[#1c2e4a] px-5 py-20">
+      <section className="border-b-2 border-[#252535] px-6 py-20">
         <div className="mx-auto max-w-7xl">
-          <div className="mb-12 text-center">
-            <div className="section-kicker mb-3 text-[#22d3ee]">Access Roles</div>
-            <h2 className="text-[32px] font-bold text-[#f0f6ff]">Three roles, one integrated system</h2>
+          <div className="mb-12">
+            <div className="section-kicker mb-3 text-[#FFE600]">+ Access Roles</div>
+            <h2 className="text-[36px] font-black uppercase leading-[1.0] tracking-[-0.01em] text-[#F0F0F8]">
+              Three roles,<br />one integrated system.
+            </h2>
           </div>
           <div className="grid gap-5 lg:grid-cols-3">
             {[
-              { href: "/login?role=admin", icon: ShieldCheck, tag: "COMMAND CENTRE", title: "Admin", desc: "Full ops view: ML forecasts, complaint queue, GPS dispatch, personnel map, access approval, and live analytics.", features: ["ML impact prediction","Nearest-officer dispatch","Personnel map","Complaint queue"], border: "border-[#22d3ee]/20 hover:border-[#22d3ee]/50", iconBg: "bg-[#22d3ee]/10", iconColor: "text-[#22d3ee]", accent: "text-[#22d3ee]" },
-              { href: "/login?role=operator", icon: Navigation, tag: "FIELD OFFICER", title: "Operator", desc: "Duty assignment view, live GPS beacon, En Route navigation with Mappls map, and real-time command chat.", features: ["Live assignment brief","GPS beacon sync","Mappls navigation","Command chat"], border: "border-[#3b82f6]/20 hover:border-[#3b82f6]/50", iconBg: "bg-[#3b82f6]/10", iconColor: "text-[#3b82f6]", accent: "text-[#3b82f6]" },
-              { href: "/login?role=viewer", icon: Activity,   tag: "POLICE REVIEW",  title: "Viewer", desc: "Read-only operational reports: severity distribution, complaint trends, forecast history, and city coverage.", features: ["Severity charts","Forecast history","Coverage report","Complaint trends"], border: "border-[#a78bfa]/20 hover:border-[#a78bfa]/50", iconBg: "bg-[#a78bfa]/10", iconColor: "text-[#a78bfa]", accent: "text-[#a78bfa]" },
+              { href: "/login?role=admin",    icon: ShieldCheck, tag: "COMMAND CENTRE", title: "Admin",    desc: "Full ops view: ML forecasts, complaint queue, GPS dispatch, personnel map, access approval, and live analytics.", features: ["ML impact prediction","Nearest-officer dispatch","Personnel map","Complaint queue"], accent: "#FFE600" },
+              { href: "/login?role=operator", icon: Navigation,  tag: "FIELD OFFICER",  title: "Operator", desc: "Duty assignment view, live GPS beacon, En Route navigation with Mappls map, and real-time command chat.",          features: ["Live assignment brief","GPS beacon sync","Mappls navigation","Command chat"],           accent: "#22D3EE" },
+              { href: "/login?role=viewer",   icon: Activity,    tag: "POLICE REVIEW",  title: "Viewer",   desc: "Read-only operational reports: severity distribution, complaint trends, forecast history, and city coverage.",    features: ["Severity charts","Forecast history","Coverage report","Complaint trends"],              accent: "#A78BFA" },
             ].map((role) => {
               const Icon = role.icon;
               return (
-                <Link className={`cmd-card group flex flex-col border p-6 transition-all ${role.border}`} href={role.href} key={role.href}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${role.iconBg} ${role.iconColor}`}>
+                <Link
+                  className="browser-card group flex flex-col transition-all hover:border-current"
+                  href={role.href}
+                  key={role.href}
+                  style={{ borderColor: `${role.accent}30` }}
+                >
+                  <div className="browser-card-header border-b-2" style={{ borderColor: `${role.accent}30` }}>
+                    <span className="browser-dot" style={{ background: "#FF5F57" }} />
+                    <span className="browser-dot" style={{ background: "#FEBC2E" }} />
+                    <span className="browser-dot" style={{ background: "#28C840" }} />
+                    <span className="ml-3 font-mono text-[9px] font-bold uppercase tracking-[0.16em]" style={{ color: role.accent }}>{role.tag}</span>
+                  </div>
+                  <div className="flex flex-1 flex-col p-6">
+                    <div className="flex h-12 w-12 items-center justify-center rounded" style={{ background: `${role.accent}18`, color: role.accent }}>
                       <Icon className="h-5 w-5" />
                     </div>
-                    <span className={`mono-id rounded border border-current/20 px-2 py-1 ${role.accent}`}>{role.tag}</span>
-                  </div>
-                  <h3 className="mt-5 text-[18px] font-bold text-[#f0f6ff]">{role.title}</h3>
-                  <p className="mt-2 flex-1 text-[13px] leading-6 text-[#7c9ab8]">{role.desc}</p>
-                  <ul className="mt-5 space-y-1.5">
-                    {role.features.map((f) => (
-                      <li className={`flex items-center gap-2 text-[12px] ${role.accent}`} key={f}>
-                        <ChevronRight className="h-3 w-3 opacity-60" />{f}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className={`mt-5 inline-flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.08em] ${role.accent} opacity-0 transition group-hover:opacity-100`}>
-                    Open Login <ArrowRight className="h-3.5 w-3.5" />
+                    <h3 className="mt-5 text-[22px] font-black uppercase tracking-[-0.01em] text-[#F0F0F8]">{role.title}</h3>
+                    <p className="mt-2 flex-1 text-[13px] leading-6 text-[#8888A0]">{role.desc}</p>
+                    <ul className="mt-5 space-y-2">
+                      {role.features.map((f) => (
+                        <li className="flex items-center gap-2 text-[12px] font-semibold" key={f} style={{ color: role.accent }}>
+                          <ChevronRight className="h-3 w-3 opacity-70" />{f}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-5 inline-flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.1em] opacity-0 transition group-hover:opacity-100" style={{ color: role.accent }}>
+                      Open Login <ArrowRight className="h-3.5 w-3.5" />
+                    </div>
                   </div>
                 </Link>
               );
@@ -295,20 +458,22 @@ export default function HomePage() {
       </section>
 
       {/* ── Citizen portal ───────────────────────────────────────────────────── */}
-      <section className="border-b border-[#1c2e4a] px-5 py-20">
+      <section className="border-b-2 border-[#252535] px-6 py-20">
         <div className="mx-auto max-w-7xl">
-          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_400px]">
             <div>
-              <div className="section-kicker mb-3 text-[#22d3ee]">Public Access</div>
-              <h2 className="text-[32px] font-bold text-[#f0f6ff]">Citizen complaint portal</h2>
-              <p className="mt-4 max-w-xl text-[14px] leading-7 text-[#7c9ab8]">
-                Any citizen can report a traffic issue — no login required. DRISHTI AI
-                auto-assesses severity, routes it to the nearest officer, and generates
-                a tracking token instantly.
+              <div className="section-kicker mb-3 text-[#FFE600]">+ Public Access</div>
+              <h2 className="text-[36px] font-black uppercase leading-[1.0] tracking-[-0.01em] text-[#F0F0F8]">
+                Citizen complaint<br />portal.
+              </h2>
+              <p className="mt-5 max-w-xl text-[14px] leading-7 text-[#8888A0]">
+                Any citizen can report a traffic issue without logging in. Write one clear,
+                detailed description of the problem. DRISHTI extracts the useful incident
+                fields and sends the structured case into the police workflow.
               </p>
-              <p className="mt-3 max-w-xl text-[14px] leading-7 text-[#7c9ab8]">
-                Use token <span className="font-mono text-[#22d3ee]">DRS-BTP-A3C9F1</span> to
-                track your complaint status at any time.
+              <p className="mt-3 max-w-xl text-[14px] leading-7 text-[#8888A0]">
+                After submission, use the generated tracking token to follow police updates
+                through dispatch and resolution.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link className="btn-primary" href="/citizen/grievance">
@@ -319,45 +484,53 @@ export default function HomePage() {
                 </Link>
               </div>
             </div>
-            <div className="cmd-card p-6">
-              <div className="section-kicker mb-4 text-[#22d3ee]">Reportable categories</div>
-              {[
-                { l: "Event congestion",    d: "Concerts, rallies, marathons causing gridlock",     c: "bg-[#f59e0b]" },
-                { l: "Illegal parking",     d: "Vehicles blocking junctions or bus stops",           c: "bg-[#3b82f6]" },
-                { l: "Road closure",        d: "Unexpected blockages or diversions",                 c: "bg-[#ef4444]" },
-                { l: "Accident / breakdown",d: "Vehicle collision or breakdown on carriageway",      c: "bg-[#a78bfa]" },
-                { l: "Signal failure",      d: "Traffic light malfunction at junction",              c: "bg-[#22d3ee]" },
-              ].map((item) => (
-                <div className="flex gap-3 border-b border-[#1c2e4a] py-3 last:border-0" key={item.l}>
-                  <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${item.c}`} />
-                  <div>
-                    <div className="text-[13px] font-semibold text-[#f0f6ff]">{item.l}</div>
-                    <div className="mt-0.5 text-[11px] text-[#3d5278]">{item.d}</div>
+
+            <div className="browser-card">
+              <div className="browser-card-header border-b-2 border-[#252535]">
+                <span className="browser-dot" style={{ background: "#FF5F57" }} />
+                <span className="browser-dot" style={{ background: "#FEBC2E" }} />
+                <span className="browser-dot" style={{ background: "#28C840" }} />
+                <span className="ml-3 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-[#444455]">REPORTABLE CATEGORIES</span>
+              </div>
+              <div className="p-5">
+                {[
+                  { l: "Event congestion",     d: "Concerts, rallies, marathons causing gridlock",     c: "#F59E0B" },
+                  { l: "Illegal parking",      d: "Vehicles blocking junctions or bus stops",           c: "#3B82F6" },
+                  { l: "Road closure",         d: "Unexpected blockages or diversions",                 c: "#EF4444" },
+                  { l: "Accident / breakdown", d: "Vehicle collision or breakdown on carriageway",      c: "#A78BFA" },
+                  { l: "Signal failure",       d: "Traffic light malfunction at junction",              c: "#FFE600" },
+                ].map((item) => (
+                  <div className="flex gap-3 border-b-2 border-[#252535] py-3.5 last:border-0" key={item.l}>
+                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ background: item.c }} />
+                    <div>
+                      <div className="text-[13px] font-bold text-[#F0F0F8]">{item.l}</div>
+                      <div className="mt-0.5 text-[11px] text-[#444455]">{item.d}</div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* ── Footer ───────────────────────────────────────────────────────────── */}
-      <footer className="border-t border-[#1c2e4a] px-5 py-8">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4">
+      <footer className="border-t-2 border-[#252535] px-6 py-10">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#0ea5c5] to-[#2d6ce0]">
-              <Radio className="h-4 w-4 text-white" />
+            <div className="flex h-9 w-9 items-center justify-center rounded bg-[#FFE600]">
+              <Radio className="h-4 w-4 text-[#08080F]" />
             </div>
             <div>
-              <div className="font-mono text-[12px] font-bold tracking-widest text-[#22d3ee]">DRISHTI</div>
-              <div className="mono-id text-[#3d5278]">Bengaluru Police · Traffic Ops Command</div>
+              <div className="font-mono text-[13px] font-bold tracking-widest text-[#FFE600]">DRISHTI</div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#444455]">Bengaluru Police · Traffic Ops Command</div>
             </div>
           </div>
-          <div className="flex flex-wrap gap-6 text-[12px] text-[#3d5278]">
-            <Link className="hover:text-[#dde8f5]" href="/citizen/grievance">Report Incident</Link>
-            <Link className="hover:text-[#dde8f5]" href="/citizen/track">Track Complaint</Link>
-            <Link className="hover:text-[#dde8f5]" href="/register">Officer Access</Link>
-            <Link className="hover:text-[#dde8f5]" href="/login">Police Login</Link>
+          <div className="flex flex-wrap gap-6 text-[11px] font-bold uppercase tracking-[0.08em] text-[#444455]">
+            <Link className="hover:text-[#FFE600] transition" href="/citizen/grievance">Report Incident</Link>
+            <Link className="hover:text-[#FFE600] transition" href="/citizen/track">Track Complaint</Link>
+            <Link className="hover:text-[#FFE600] transition" href="/register">Officer Access</Link>
+            <Link className="hover:text-[#FFE600] transition" href="/login">Police Login</Link>
           </div>
         </div>
       </footer>

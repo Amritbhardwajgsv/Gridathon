@@ -25,6 +25,8 @@ from app.schemas import (
     HealthResponse,
     ImpactPredictionRequest,
     ImpactPredictionResponse,
+    IncidentPredictionRequest,
+    IncidentPredictionResponse,
     LoginRequest,
     OperationsSummaryResponse,
     PersonnelLocationUpdateRequest,
@@ -34,6 +36,7 @@ from app.schemas import (
     PolicePersonnelResponse,
     RegisterRequest,
     RejectUserRequest,
+    SystemLogListResponse,
     TokenResponse,
     UserListResponse,
 )
@@ -41,7 +44,7 @@ from app.core.config import get_mapmyindia_api_key
 from app.services.auth_service import AuthError, auth_service, get_current_user, require_roles, security
 from app.services.chat_service import chat_service
 from app.services.deployment_service import deployment_service
-from app.services.grievance_repository import GrievanceRepository
+from app.services.grievance_repository import GrievanceRepository, GrievanceRejectedError
 from app.services.prediction_repository import PredictionRepository
 from app.services.prediction_service import PredictionError, PredictionService
 from app.services.resource_recommendation_service import resource_recommendation_service
@@ -553,7 +556,13 @@ def create_citizen_grievance(
 ) -> CitizenGrievanceResponse:
     try:
         return grievance_repository.create(request)
+    except GrievanceRejectedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "FIREWALL_REJECTED", "reason": str(exc)},
+        ) from exc
     except Exception as exc:
+        logger.exception("Grievance creation failed: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not submit grievance",
@@ -582,6 +591,14 @@ def operations_summary(
     return prediction_repository.operations_summary()
 
 
+@app.get("/viewer/system-logs", response_model=SystemLogListResponse, tags=["operations"])
+def system_logs(
+    limit: int = Query(default=200, ge=1, le=500),
+    user: AuthUserResponse = Depends(require_roles("admin", "viewer")),
+) -> SystemLogListResponse:
+    return SystemLogListResponse(items=prediction_repository.system_logs(limit))
+
+
 # ---------------------------------------------------------------------------
 # Prediction
 # ---------------------------------------------------------------------------
@@ -596,6 +613,48 @@ def predict_impact(
         prediction_repository.save_prediction(request, result, user_id=str(user.id))
         return result
     except PredictionError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post(
+    "/predict/incident",
+    response_model=IncidentPredictionResponse,
+    tags=["prediction"],
+    summary="ML incident prediction with LLM firewall — open to all",
+)
+def predict_incident(request: IncidentPredictionRequest) -> IncidentPredictionResponse:
+    """
+    Accepts a plain-language description (English or Kannada) + GPS coords,
+    validates it through the LLM firewall, then returns duration estimate,
+    priority, personnel count, and urgency from the trained XGBoost models.
+    No authentication required — citizens and operators can both call this.
+    """
+    from app.services.incident_predictor import predict_incident as _predict
+    try:
+        result = _predict(
+            description           = request.description,
+            latitude              = request.latitude,
+            longitude             = request.longitude,
+            requires_road_closure = request.requires_road_closure,
+            event_cause           = request.event_cause,
+            veh_type              = request.veh_type,
+            corridor              = request.corridor,
+            police_station        = request.police_station,
+            zone                  = request.zone,
+        )
+        return IncidentPredictionResponse(
+            status   = result["status"],
+            firewall = result["firewall"],
+            estimated_duration_min = result.get("estimated_duration_min"),
+            estimated_duration_hrs = result.get("estimated_duration_hrs"),
+            priority               = result.get("priority"),
+            personnel_to_deploy    = result.get("personnel_to_deploy"),
+            urgency                = result.get("urgency"),
+            detected_cause         = result.get("detected_cause"),
+            detected_veh_type      = result.get("detected_veh_type"),
+        )
+    except Exception as exc:
+        logger.exception("Incident prediction failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
