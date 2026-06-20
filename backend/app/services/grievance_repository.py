@@ -32,14 +32,13 @@ class GrievanceRepository:
         tracking_id = f"DRS-BTP-{uuid4().hex[:10].upper()}"
         payload_data = self._to_dict(payload)
 
-        # ── LLM firewall — reject non-traffic descriptions before DB insert ──
-        # llm_firewall() runs a keyword pre-filter first (instant, no model needed).
-        # Only loads the SentenceTransformer if the keyword gate passes.
+        # ── Keyword pre-filter (sync, instant) ───────────────────────────────
+        # Rejects obviously non-traffic text before any DB insert.
+        # Gemini validation runs async after the response is sent (see main.py).
         if payload.description and len(payload.description.strip()) >= 10:
             import app.services.incident_predictor as _predictor
-            is_valid, reason = _predictor.llm_firewall(payload.description)
-            if not is_valid:
-                raise GrievanceRejectedError(reason)
+            if not _predictor._keyword_prefilter(payload.description):
+                raise GrievanceRejectedError("Input does not describe a road traffic incident.")
 
         geocode_result = None
 
@@ -326,6 +325,33 @@ class GrievanceRepository:
                 row = cursor.fetchone()
 
         return CitizenGrievanceResponse(**row) if row else None
+
+    def validate_async(self, tracking_id: str, description: str) -> None:
+        """Background task: run Gemini firewall and flag the record if rejected.
+        Called after the HTTP response has already been sent, so latency doesn't matter."""
+        import logging
+        import app.services.incident_predictor as _predictor
+        log = logging.getLogger("drishti.firewall")
+        try:
+            is_valid, reason = _predictor.llm_firewall(description)
+            if is_valid:
+                return
+            # Gemini rejected — stamp the recommendation so operators can see it
+            import psycopg
+            with psycopg.connect(self.database_url, row_factory=dict_row) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        update citizen_grievances
+                        set agent_recommendation = %s
+                        where upper(tracking_id) = upper(%s)
+                        """,
+                        (f"[FIREWALL REJECTED] {reason}", tracking_id),
+                    )
+            cache.delete(GRIEVANCES_LIST)
+            log.info("Firewall async rejected %s: %s", tracking_id, reason)
+        except Exception as exc:
+            log.warning("Async firewall check failed for %s: %s", tracking_id, exc)
 
     @staticmethod
     def _to_dict(payload: CitizenGrievanceCreateRequest) -> dict:
