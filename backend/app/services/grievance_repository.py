@@ -33,11 +33,11 @@ class GrievanceRepository:
         payload_data = self._to_dict(payload)
 
         # ── LLM firewall — reject non-traffic descriptions before DB insert ──
+        # llm_firewall() runs a keyword pre-filter first (instant, no model needed).
+        # Only loads the SentenceTransformer if the keyword gate passes.
         if payload.description and len(payload.description.strip()) >= 10:
             import app.services.incident_predictor as _predictor
-            _predictor._ensure_loaded()   # raises on model load failure — hard fail
-            emb = _predictor._embedder.encode([payload.description])[0]
-            is_valid, reason = _predictor.llm_firewall(payload.description, emb)
+            is_valid, reason = _predictor.llm_firewall(payload.description)
             if not is_valid:
                 raise GrievanceRejectedError(reason)
 

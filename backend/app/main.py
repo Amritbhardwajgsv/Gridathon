@@ -193,14 +193,27 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 # App setup
 # ---------------------------------------------------------------------------
 
+def _warm_predictor() -> None:
+    """Load the SentenceTransformer + XGBoost models in a background thread so
+    the first grievance request doesn't block waiting for a 20-50s model load."""
+    try:
+        import app.services.incident_predictor as _p
+        _p._ensure_loaded()
+        logger.info("Predictor models warm (embedder + XGBoost ready)")
+    except Exception as exc:
+        logger.warning("Predictor warm-up failed (non-fatal): %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    import threading
     from app.core.config import get_database_url
     db_url = get_database_url()
     event_queue.init(db_url)
     event_queue.start()
     event_queue.replay_pending()
-    logger.info("DRISHTI backend starting — event queue ready, models load on first /predict-impact call")
+    threading.Thread(target=_warm_predictor, daemon=True, name="predictor-warmup").start()
+    logger.info("DRISHTI backend starting — predictor warming in background, event queue ready")
     yield
     event_queue.stop()
     logger.info("DRISHTI backend shutdown")

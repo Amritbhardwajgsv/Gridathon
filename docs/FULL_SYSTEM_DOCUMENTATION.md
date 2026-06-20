@@ -2,7 +2,8 @@
 
 **DRISHTI** — Dynamic Resource Intelligence for Smart Highway and Traffic Intervention  
 **Built for**: Bengaluru Police Traffic Operations  
-**Stack**: Next.js 15 · FastAPI 2.0 · PostgreSQL · Redis · scikit-learn · Docker
+**Stack**: Next.js 15 · FastAPI 2.0 · PostgreSQL (Supabase) · Redis · scikit-learn · Docker  
+**Deployed**: Render (backend + frontend) · Supabase (PostgreSQL, Sydney ap-southeast-2)
 
 ---
 
@@ -23,6 +24,10 @@
 13. [Resilience & Observability](#13-resilience--observability)
 14. [Development & Testing](#14-development--testing)
 15. [Running the System](#15-running-the-system)
+16. [Event Queue System](#16-event-queue-system)
+17. [Redis Response Cache](#17-redis-response-cache)
+18. [SEO & Social Sharing](#18-seo--social-sharing)
+19. [Frontend Performance — Lazy Loading](#19-frontend-performance--lazy-loading)
 
 ---
 
@@ -103,14 +108,16 @@ GRIDATHON/
 │   │   │   └── config.py                   # .env loader, configuration accessors
 │   │   ├── services/
 │   │   │   ├── auth_service.py             # Register, login, JWT, approval, rejection
-│   │   │   ├── token_blacklist.py          # Redis JTI revocation
-│   │   │   ├── prediction_service.py       # Duration & impact model inference
+│   │   │   ├── token_blacklist.py          # Redis JTI revocation on logout
+│   │   │   ├── cache.py                    # Redis response cache (list queries, 15–60s TTL)
+│   │   │   ├── event_queue.py              # In-process event queue + PostgreSQL outbox
+│   │   │   ├── prediction_service.py       # Duration & impact model inference (lazy-loaded)
 │   │   │   ├── nlp_agent_service.py        # Rule-based NLP extraction & urgency scoring
-│   │   │   ├── resource_recommendation_service.py  # Resource deployment prediction
+│   │   │   ├── resource_recommendation_service.py  # Resource deployment prediction (lazy-loaded)
 │   │   │   ├── operational_policy.py       # Feature engineering + policy fallback rules
-│   │   │   ├── grievance_repository.py     # Complaint creation, geocoding, triage
+│   │   │   ├── grievance_repository.py     # Complaint creation, geocoding, triage; cache-aware
 │   │   │   ├── grievance_agent.py          # Priority scoring + severity triage
-│   │   │   ├── deployment_service.py       # Personnel, orders, GPS, assignment
+│   │   │   ├── deployment_service.py       # Personnel, orders, GPS, assignment; cache-aware
 │   │   │   ├── chat_service.py             # Deployment chat persistence
 │   │   │   ├── llm_service.py              # Ollama recommendation text
 │   │   │   ├── email_service.py            # SMTP approval/rejection email
@@ -148,12 +155,20 @@ GRIDATHON/
 ├── frontend/
 │   ├── src/
 │   │   ├── app/
-│   │   │   ├── page.tsx                    # Landing (hero, capabilities, roles)
+│   │   │   ├── layout.tsx                  # Root layout; full SEO metadata + OG tags
+│   │   │   ├── opengraph-image.tsx         # Edge-rendered 1200×630 OG image
+│   │   │   ├── sitemap.ts                  # Auto-generated /sitemap.xml
+│   │   │   ├── robots.ts                   # Auto-generated /robots.txt
+│   │   │   ├── page.tsx                    # Landing (hero, capabilities, roles, JSON-LD)
+│   │   │   ├── login/layout.tsx            # Page-level SEO metadata (noindex)
 │   │   │   ├── login/page.tsx              # Police login (3 demo accounts)
+│   │   │   ├── register/layout.tsx         # Page-level SEO metadata (noindex)
 │   │   │   ├── register/page.tsx           # Officer access request
 │   │   │   ├── register/viewer/page.tsx    # Viewer access request
 │   │   │   ├── citizen/
+│   │   │   │   ├── grievance/layout.tsx    # Page-level SEO metadata (indexed)
 │   │   │   │   ├── grievance/page.tsx      # Public complaint form
+│   │   │   │   ├── track/layout.tsx        # Page-level SEO metadata (indexed)
 │   │   │   │   ├── track/page.tsx          # Tracking token lookup
 │   │   │   │   └── predict/page.tsx        # Public prediction demo
 │   │   │   ├── dashboard/
@@ -359,7 +374,7 @@ Run migrations `001` → `011` in sequence before starting the backend.
 |-------|---------|
 | `drishti_event_log` | Append-only event history (trigger on grievance/prediction changes) |
 | `agent_actions` | Triage recommendation audit |
-| `event_stream_outbox` | Transactional outbox pattern (schema present; not wired) |
+| `event_stream_outbox` | Transactional outbox pattern — **active**; every event written here inside the same DB transaction before being dispatched to `event_queue` handlers |
 | `event_conflict_escalations` | Overlapping corridor review (schema only) |
 | `event_pii_vault` | Sensitive model-excluded data (schema only) |
 | `retraining_runs` | Retraining batch metadata |
@@ -373,9 +388,11 @@ Run migrations `001` → `011` in sequence before starting the backend.
 ### Authentication flow
 
 ```
-JWT stored in: Redis blacklist (logout revocation)
-Token format:  HS256 · 720-minute TTL
-Header:        Authorization: Bearer <token>
+JWT delivered via: HttpOnly cookie (cross-origin: SameSite=None; Secure)
+                   Bearer header accepted as fallback (API testing tools)
+Token format:      HS256 · 720-minute TTL
+Cookie name:       access_token
+Redis blacklist:   JTI stored on logout until natural expiry (TTL = remaining seconds)
 ```
 
 JWT payload:
@@ -670,7 +687,7 @@ New user registers → approval_status = "pending"
 
 ## 7. Machine Learning Architecture
 
-### 7.1 Active models (loaded at startup — required)
+### 7.1 Active models (lazy-loaded on first request)
 
 | Model file | Size | Type | Target |
 |-----------|------|------|--------|
@@ -900,29 +917,30 @@ grievance_repository.create(payload)
 ### 8.1 Session management (`lib/auth.ts`)
 
 ```
-localStorage keys:
-  drishti_access_token  ← JWT
-  drishti_user          ← User snapshot (JSON)
+Auth token:    HttpOnly cookie (set by backend, never readable by JS)
+localStorage:  drishti_user ← User snapshot (JSON) only — no token
 
 validateSession()
-  → GET /auth/me with stored token
-  → On 401: clear storage, redirect to /login
+  → GET /auth/me (browser sends cookie automatically)
+  → On 401: clear localStorage, redirect to /login
 
 login(email, password)
   → POST /auth/login
-  → Store token + user snapshot
+  → Backend sets HttpOnly cookie: access_token
+  → Store user snapshot in localStorage
   → Redirect to role-based dashboard
 
 logout()
-  → POST /auth/logout (blacklist token server-side)
-  → Clear localStorage
+  → POST /auth/logout (cookie sent automatically → JTI blacklisted)
+  → Clear localStorage user snapshot
   → Redirect to /login
 ```
 
 ### 8.2 API client (`lib/api.ts`)
 
 - Axios instance with `baseURL = NEXT_PUBLIC_API_URL`
-- Request interceptor: auto-attaches `Authorization: Bearer <token>`
+- `withCredentials: true` — sends HttpOnly cookie on every request (including cross-origin)
+- No Authorization header injection (token lives in cookie, not JS memory)
 - Fully typed operation wrappers for every endpoint
 
 ### 8.3 Role-based routing (`lib/roles.ts`)
@@ -982,7 +1000,7 @@ reject_user(id, reason)→ set rejected, email with reason
 ### `prediction_service.py`
 
 ```
-load_models()          → joblib.load duration_model.pkl + impact_model.pkl at startup
+load_models()          → joblib.load duration_model.pkl + impact_model.pkl (lazy: first call)
 predict(payload)       → build DataFrame → run both models → return PredictionResponse
 _build_feature_frame() → exact feature order from *_feature_columns.json
 ```
@@ -991,20 +1009,30 @@ _build_feature_frame() → exact feature order from *_feature_columns.json
 
 ```
 create(payload)              → llm_firewall → geocode → triage → nlp → DB insert
+                               → publishes grievance.created to event_queue (transactional)
+                               → invalidates Redis cache key drishti:grievances:list
 get_by_tracking_id(tid)      → SELECT by DRS-BTP-... tracking ID
 update_status(id, status)    → PATCH complaint status
-list_recent(limit=50)        → most recent complaints
+                               → publishes grievance.status_changed to event_queue
+                               → invalidates Redis cache key drishti:grievances:list
+list_recent(limit=50)        → Redis cache (20s TTL) → DB fallback
 ```
 
 ### `deployment_service.py`
 
 ```
 create_personnel(payload)           → INSERT police_personnel
-list_personnel()                    → all active personnel
+                                      → invalidates Redis drishti:personnel:list
+list_personnel()                    → Redis cache (30s TTL) → DB fallback
 create_order(payload)               → generate order number, Haversine rank, insert order + junction, set unavailable
+                                      → publishes deployment.created to event_queue
+                                      → invalidates Redis drishti:deployments:list + drishti:personnel:list
 update_location(badge_id, payload)  → UPDATE lat/lng/timestamp
 get_my_assignments(user)            → SELECT orders for current user's badge_id
+list_orders()                       → Redis cache (15s TTL) → DB fallback
 update_order_status(id, status)     → PATCH order, re-enable availability on resolve
+                                      → publishes deployment.status_changed to event_queue
+                                      → invalidates Redis drishti:deployments:list + drishti:personnel:list
 _nearest_personnel_ids(lat,lng,n)   → Haversine sort, return top N UUIDs
 ```
 
@@ -1059,8 +1087,9 @@ get_route(from_lat, from_lng, to_lat, to_lng) → GeoJSON route via Mappls
 | `JWT_SECRET_KEY` | Yes | Must be kept secret |
 | `JWT_ALGORITHM` | No | Default: `HS256` |
 | `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | No | Default: `720` |
-| `REDIS_URL` | No | Logout revocation disabled if absent |
-| `ALLOWED_ORIGINS` | No | CORS origins (default: localhost:3000,3001) |
+| `REDIS_URL` | No | Logout revocation + response cache; both disabled if absent |
+| `COOKIE_SECURE` | No | Default `true`; set `false` for local HTTP dev |
+| `ALLOWED_ORIGINS` | No | CORS origins (default: localhost:3000,3001); add Render URL on deploy |
 | `MAPMYINDIA_API_KEY` | No | Mappls REST key for geocoding & routing |
 | `MAPMYINDIA_GEOCODE_URL` | No | Mappls geocode endpoint |
 | `SMTP_HOST`, `SMTP_PORT` | No | SMTP server for approval emails |
@@ -1164,8 +1193,8 @@ CMD ["sh", "-c", "PORT=${PORT:-3000} node server.js"]
 |----------|-------|-----|
 | Critical | `POST /field/personnel/{badge}/location` is **unauthenticated** | Require device credential or remove endpoint |
 | High | WebSocket chat has no deployment-membership check — any authenticated user can read any chat room | Add membership check in WS handler |
-| High | JWT stored in `localStorage` → XSS exposure | Use `HttpOnly` secure cookies + CSP |
-| Medium | WebSocket JWT in URL query string → captured by server logs | Move to header or cookie |
+| ~~High~~ | ~~JWT stored in `localStorage` → XSS exposure~~ | **Fixed** — JWT now in HttpOnly cookie (`SameSite=None; Secure` on Render) |
+| Low | WebSocket JWT in URL query string kept as optional fallback (cookie sent automatically by browser) | Remove query param, rely on cookie only |
 | Low | `/field/location` page has no `ProtectedRoute` wrapper | Add frontend auth guard |
 
 ---
@@ -1177,14 +1206,15 @@ CMD ["sh", "-c", "PORT=${PORT:-3000} node server.js"]
 | Component down | Impact |
 |----------------|--------|
 | PostgreSQL | Core workflows fail (auth, complaints, deployment) |
-| Redis | Logout revocation skipped; JWTs remain valid until expiry |
-| Duration / Impact models | `/predict-impact` fails (startup-critical) |
+| Redis | Logout revocation skipped + response cache bypassed; app continues normally |
+| Duration / Impact models | Lazy-loaded on first `/predict-impact` call; startup succeeds without them |
 | Resource model | Operational policy rules applied as fallback |
 | Learning model | Policy defaults; learning signals absent |
 | MapMyIndia | Geocoding skipped; complaint saved without coordinates |
 | Ollama | Recommendation text not rewritten; policy text returned |
 | SMTP | Email failures logged; approval not reversed |
 | Gemini | LLM firewall uncertain-zone defaults to reject |
+| Event queue (no handlers) | Events written to outbox, marked `processed`; no side effects |
 
 ### 13.2 Logging
 
@@ -1316,6 +1346,221 @@ python ml/weekly_retraining_pipeline.py
 # To activate: copy to backend/app/models/ and restart backend
 cp backend/app/models/candidates/<timestamp>/* backend/app/models/
 ```
+
+---
+
+## 16. Event Queue System
+
+### Overview
+
+DRISHTI uses a **self-contained in-process event queue** (`backend/app/services/event_queue.py`) backed by the PostgreSQL `event_stream_outbox` table. No external message broker (Kafka, RabbitMQ, etc.) is required.
+
+### Architecture
+
+```
+Request handler
+     │
+     ├─ DB transaction (psycopg)
+     │     INSERT main record (grievance / deployment / prediction)
+     │     event_queue.publish(event_type, key, payload, cursor=cursor)
+     │       └─ INSERT event_stream_outbox row  ← same transaction
+     │     COMMIT
+     │
+     └─ In-memory queue.Queue.put(event)
+          │
+          ▼
+    Background worker thread (daemon)
+          │
+          ├─ _dispatch(event)
+          │     Call all registered handlers for event_type
+          │     Mark outbox row → "processed" or "failed"
+          │
+          └─ Retry: outbox rows with status="pending" and attempts < 3
+               Re-enqueued on startup via replay_pending()
+```
+
+### Key design properties
+
+| Property | Detail |
+|----------|--------|
+| **Transactional** | Outbox row written inside the same DB transaction as the main record — event is never lost even if the process crashes before the handler runs |
+| **Durable** | Crash recovery: `replay_pending()` on startup re-queues any `pending` outbox rows from a previous run (up to 3 attempts) |
+| **No external dependency** | Zero configuration required; works with the same Supabase DB already present |
+| **Graceful** | If no handlers are registered for an event type, the outbox row is marked `processed` immediately |
+
+### Event types published
+
+| Event type | Published by | Payload fields |
+|-----------|--------------|----------------|
+| `grievance.created` | `grievance_repository.create()` | grievance_id, tracking_id, complaint_type, severity, zone, corridor, status, agent_priority_score |
+| `grievance.status_changed` | `grievance_repository.update_status()` | grievance_id, tracking_id, new_status, severity, zone, corridor |
+| `deployment.created` | `POST /police/deployments` route | order_id, order_number, grievance_id, corridor, zone, priority, status, commander_id |
+| `deployment.status_changed` | `PATCH /police/deployments/{id}/status` route | order_id, order_number, new_status, corridor, zone, updated_by |
+| `prediction.created` | `POST /predict-impact` route | corridor, zone, event_cause_grouped, predicted_duration_minutes, impact_level, operator_id |
+
+### Lifecycle (lifespan hook in `main.py`)
+
+```python
+# startup
+event_queue.init(database_url)   # wire DB connection
+event_queue.start()              # launch daemon worker thread
+event_queue.replay_pending()     # re-queue any crash survivors
+
+# shutdown
+event_queue.stop()               # poison-pill the worker thread
+```
+
+### Adding a handler
+
+```python
+from app.services.event_queue import event_queue
+
+def on_grievance_created(event: dict) -> None:
+    # event contains all payload fields + event_type + key
+    send_sms(event["reporter_phone"], f"Complaint {event['tracking_id']} received")
+
+event_queue.subscribe("grievance.created", on_grievance_created)
+```
+
+---
+
+## 17. Redis Response Cache
+
+### Overview
+
+`backend/app/services/cache.py` provides a Redis-backed response cache that eliminates repeated DB round-trips for frequently-read, slowly-changing data. It uses the same `REDIS_URL` as the JWT blacklist. If Redis is unavailable, every call is a silent no-op and the request falls through to the DB.
+
+### Cached queries
+
+| Redis key | TTL | Invalidated when |
+|-----------|-----|-----------------|
+| `drishti:grievances:list` | 20 s | Complaint created or status changed |
+| `drishti:personnel:list` | 30 s | Officer created, deployment created, or deployment closed |
+| `drishti:deployments:list` | 15 s | Deployment created or status changed |
+| `drishti:ops:summary` | 30 s | Any prediction saved |
+| `drishti:logs:list` | 60 s | Never (slightly stale is fine for audit view) |
+| `drishti:users:list` | 60 s | User approved or rejected |
+
+### Cache API
+
+```python
+from app.services.cache import cache
+
+# Read (returns None on miss or Redis unavailable)
+data = cache.get("drishti:grievances:list")
+
+# Write
+cache.set("drishti:grievances:list", serialisable_value, ttl=20)
+
+# Invalidate specific keys
+cache.delete("drishti:grievances:list", "drishti:ops:summary")
+
+# Invalidate all keys matching a prefix
+cache.delete_prefix("drishti:deployments:")
+```
+
+### Serialization
+
+Values are stored as JSON (`json.dumps(..., default=str)`). Pydantic model lists are serialized via `.model_dump()` before writing and reconstructed on read.
+
+### Graceful degradation
+
+Redis is entirely optional. All cache operations catch exceptions and log at DEBUG level. A missing or unavailable Redis instance is detected once (`_unavailable = True`) and no further connection attempts are made for the lifetime of the process.
+
+---
+
+## 18. SEO & Social Sharing
+
+### Overview
+
+The frontend is fully optimized for search engines and social link previews (WhatsApp, Telegram, Twitter/X, LinkedIn).
+
+### Root metadata (`frontend/src/app/layout.tsx`)
+
+```typescript
+metadataBase: new URL("https://drishti-ex4s.onrender.com")
+title.template: "%s | DRISHTI · BTP"
+openGraph.type: "website"
+openGraph.locale: "en_IN"
+twitter.card: "summary_large_image"
+robots: { index: true, follow: true, googleBot: { max-image-preview: "large" } }
+```
+
+### Dynamic OG image (`frontend/src/app/opengraph-image.tsx`)
+
+Edge-rendered 1200×630 PNG served at `/opengraph-image`. Auto-wired by Next.js to all `og:image` and `twitter:image` meta tags. Shows DRISHTI branding, headline, and the 4-stat row. No static image needed.
+
+### Per-page metadata
+
+Pages use `"use client"` and cannot export `metadata` directly — metadata is placed in route-level `layout.tsx` files:
+
+| Route | Title | Notes |
+|-------|-------|-------|
+| `/` | DRISHTI — AI Traffic Operations Platform \| Bengaluru Police | JSON-LD structured data included |
+| `/citizen/grievance` | Report a Traffic Incident \| DRISHTI · BTP | Citizen-facing, indexed |
+| `/citizen/track` | Track Your Complaint \| DRISHTI · BTP | Citizen-facing, indexed |
+| `/login` | Police Login \| DRISHTI · BTP | `robots: noindex` |
+| `/register` | Request Officer Access \| DRISHTI · BTP | `robots: noindex` |
+
+### JSON-LD structured data (home page)
+
+Three schema.org entities embedded as `<script type="application/ld+json">`:
+
+| Schema type | `@id` | Purpose |
+|-------------|-------|---------|
+| `WebApplication` | `/#webapp` | App name, category (`GovernmentApplication`), feature list, area served |
+| `Organization` | `/#org` | Publisher name, logo URL |
+| `WebSite` | `/#website` | Site name + `SearchAction` (track by complaint ID) |
+
+### Sitemap & robots
+
+| File | Generated by | Path |
+|------|-------------|------|
+| `/sitemap.xml` | `src/app/sitemap.ts` | Auto-generated at build; 4 public URLs |
+| `/robots.txt` | `src/app/robots.ts` | Allows public routes, disallows `/dashboard/`, `/login`, `/register`, `/api/` |
+
+---
+
+## 19. Frontend Performance — Lazy Loading
+
+### Strategy
+
+Heavy components are loaded on demand using Next.js `dynamic()` with a spinner fallback. This reduces initial JS bundle size and Time to Interactive (TTI) for each dashboard page.
+
+### Lazy-loaded components by page
+
+| Page | Component | Reason |
+|------|-----------|--------|
+| `/dashboard/admin` | `PersonnelMap` | Leaflet + Mappls SDK; `ssr: false` required |
+| `/dashboard/admin` | `ChatPanel` | WebSocket hook + message list |
+| `/dashboard/complaints` | `PredictionForm` | Large form with validation logic |
+| `/dashboard/complaints` | `PredictionResultCard` | Heavy result renderer |
+| `/dashboard/field` | `ChatPanel` | WebSocket hook |
+| `/dashboard/field` | `EnrouteMapPanel` | Mappls route map; `ssr: false` |
+| `/dashboard/operator` | `DeploymentAssignmentPanel` | Complex assignment UI |
+| `/dashboard/access` | `AccessRequestsPanel` | Admin approval list |
+
+### Map components
+
+All Leaflet/Mappls components use `ssr: false` to prevent server-side rendering errors, since these libraries require `window` and browser APIs that don't exist in Node.js.
+
+### Loading fallback pattern
+
+```tsx
+const HeavyComponent = dynamic(() => import("@/components/HeavyComponent"), {
+  ssr: false,   // omit for non-map components
+  loading: () => (
+    <div className="flex h-48 items-center justify-center gap-2 text-[12px] text-[#3d5278]">
+      <Loader2 className="h-4 w-4 animate-spin text-[#22d3ee]" />
+      Loading…
+    </div>
+  ),
+});
+```
+
+### Image lazy loading
+
+All non-critical images (news clippings on landing page) use `loading="lazy"` to defer off-screen image fetches until the user scrolls near them.
 
 ---
 
