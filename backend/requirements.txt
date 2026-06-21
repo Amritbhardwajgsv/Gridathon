@@ -13,3 +13,4 @@ requests
 langchain-core
 google-genai
 redis
+resend
