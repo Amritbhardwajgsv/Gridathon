@@ -205,11 +205,16 @@ def llm_firewall(description: str) -> tuple[bool, str]:
 
         if answer.startswith("YES"):
             return True, "Gemini validated"
-        return False, "Gemini determined the description is not a traffic incident."
+        if answer.startswith("NO"):
+            return False, "Gemini determined the description is not a traffic incident."
+        # Ambiguous response — pass through
+        return True, "Gemini response unclear — passed by keyword match"
     except concurrent.futures.TimeoutError:
-        return False, "Validation timed out. Please describe the road situation clearly."
+        # Gemini slow or unavailable — don't penalise the citizen
+        return True, "Validation timed out — passed by keyword match"
     except Exception:
-        return False, "Description could not be validated as a traffic incident. Please describe the road situation clearly."
+        # API error — pass through rather than wrongly reject
+        return True, "Validation unavailable — passed by keyword match"
 
 
 # ─── ML-only inference (used by grievance_agent after firewall already passed) ─
