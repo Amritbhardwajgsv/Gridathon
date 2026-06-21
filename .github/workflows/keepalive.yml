@@ -1,0 +1,29 @@
+name: Keep Render Services Alive
+
+on:
+  schedule:
+    # Every 10 minutes — Render free tier spins down after 15 min of inactivity
+    - cron: "*/10 * * * *"
+  workflow_dispatch: # allow manual trigger
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+            https://drishtibackend-bljb.onrender.com/health)
+          echo "Backend /health → $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::Backend returned $STATUS"
+          fi
+
+      - name: Ping frontend
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+            https://drishti-ex4s.onrender.com)
+          echo "Frontend / → $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::Frontend returned $STATUS"
+          fi
