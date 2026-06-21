@@ -539,45 +539,65 @@ def field_route(
     to_lng: float,
     user: AuthUserResponse = Depends(require_roles("admin", "operator", "viewer")),
 ) -> dict:
-    """Proxy to Mappls route API — keeps API key server-side."""
+    """Proxy to Mappls route API (key in URL path) with OSRM fallback."""
     import requests as _requests
 
-    api_key = get_mapmyindia_api_key()
-    if not api_key:
-        raise HTTPException(status_code=503, detail="Mapping API not configured")
+    coords = f"{from_lng},{from_lat};{to_lng},{to_lat}"
 
-    url = (
-        f"https://apis.mappls.com/advancedmaps/v1/route_adv/driving/"
-        f"{from_lng},{from_lat};{to_lng},{to_lat}"
-    )
+    # ── 1. Mappls REST API (key in URL path, correct format) ──────────────────
+    api_key = get_mapmyindia_api_key()
+    if api_key:
+        url = f"https://apis.mappls.com/advancedmaps/v1/{api_key}/route_adv/driving/{coords}"
+        try:
+            resp = _requests.get(
+                url,
+                params={"geometries": "geojson", "overview": "full", "steps": "false"},
+                timeout=8,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            routes = data.get("routes") or []
+            if routes:
+                geometry  = routes[0].get("geometry", {})
+                duration_s = routes[0].get("duration", 0)
+                distance_m = routes[0].get("distance", 0)
+                return {
+                    "coordinates":      geometry.get("coordinates", []),
+                    "duration_minutes": round(duration_s / 60, 1),
+                    "distance_km":      round(distance_m / 1000, 2),
+                }
+        except Exception as exc:
+            logger.warning("Mappls route API failed: %s", exc)
+
+    # ── 2. OSRM demo server (no key needed, free for demos) ───────────────────
     try:
+        osrm_url = f"http://router.project-osrm.org/route/v1/driving/{coords}"
         resp = _requests.get(
-            url,
-            headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"},
-            params={"geometries": "geojson", "overview": "full", "steps": "false"},
+            osrm_url,
+            params={"overview": "full", "geometries": "geojson"},
             timeout=8,
         )
         resp.raise_for_status()
-        data = resp.json()
+        data   = resp.json()
         routes = data.get("routes") or []
         if routes:
-            geometry = routes[0].get("geometry", {})
+            geometry   = routes[0].get("geometry", {})
             duration_s = routes[0].get("duration", 0)
             distance_m = routes[0].get("distance", 0)
             return {
-                "coordinates": geometry.get("coordinates", []),
+                "coordinates":      geometry.get("coordinates", []),
                 "duration_minutes": round(duration_s / 60, 1),
-                "distance_km": round(distance_m / 1000, 2),
+                "distance_km":      round(distance_m / 1000, 2),
             }
     except Exception as exc:
-        logger.warning("Mappls route API failed: %s", exc)
+        logger.warning("OSRM route API failed: %s", exc)
 
-    # Straight-line fallback so UI doesn't break when API is down
+    # ── 3. Straight-line last resort ──────────────────────────────────────────
     return {
-        "coordinates": [[from_lng, from_lat], [to_lng, to_lat]],
+        "coordinates":      [[from_lng, from_lat], [to_lng, to_lat]],
         "duration_minutes": None,
-        "distance_km": None,
-        "fallback": True,
+        "distance_km":      None,
+        "fallback":         True,
     }
 
 
