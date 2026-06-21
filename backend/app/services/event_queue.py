@@ -115,8 +115,8 @@ class EventQueue:
         handlers   = self._handlers.get(event_type, [])
 
         if not handlers:
-            logger.debug("No handlers for %s — marking processed", event_type)
-            self._update_outbox(outbox_id, "processed")
+            logger.debug("No handlers for %s — marking published", event_type)
+            self._update_outbox(outbox_id, "published")
             return
 
         failed = False
@@ -127,7 +127,7 @@ class EventQueue:
                 logger.exception("Handler %s failed for %s", handler.__name__, event_type)
                 failed = True
 
-        self._update_outbox(outbox_id, "failed" if failed else "processed")
+        self._update_outbox(outbox_id, "failed" if failed else "published")
 
     def _write_outbox(
         self,
@@ -164,7 +164,7 @@ class EventQueue:
                         """
                         update event_stream_outbox
                         set publish_status = %s,
-                            published_at   = case when %s = 'processed' then now() else null end,
+                            published_at   = case when %s = 'published' then now() else null end,
                             attempts       = attempts + 1
                         where id = %s
                         """,
