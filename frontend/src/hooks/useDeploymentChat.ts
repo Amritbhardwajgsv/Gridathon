@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { getStoredToken } from "@/lib/auth";
+
 export type ChatMessage = {
   id: string;
   deployment_id: string;
@@ -37,9 +39,11 @@ export function useDeploymentChat(deploymentId: string | null) {
   const connect = useCallback(() => {
     if (!deploymentId || !mountedRef.current) return;
 
-    // The HttpOnly auth cookie is sent automatically by the browser on the
-    // WebSocket upgrade request — no token in the URL needed.
-    const url = `${WS_BASE}/ws/chat/${encodeURIComponent(deploymentId)}`;
+    // Pass JWT as query param — HttpOnly cookies are not reliably sent on
+    // cross-origin WebSocket upgrades in all browsers/proxies.
+    const token = getStoredToken();
+    const qs    = token ? `?token=${encodeURIComponent(token)}` : "";
+    const url   = `${WS_BASE}/ws/chat/${encodeURIComponent(deploymentId)}${qs}`;
     const ws  = new WebSocket(url);
     wsRef.current = ws;
 
