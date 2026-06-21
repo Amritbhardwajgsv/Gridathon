@@ -5,6 +5,7 @@ numpy
 scikit-learn==1.6.1
 xgboost
 joblib
+fastembed
 psycopg[binary]
 PyJWT
 bcrypt
