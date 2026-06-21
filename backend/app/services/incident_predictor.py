@@ -67,22 +67,31 @@ VEH_TYPE_KEYWORDS: dict[str, list[str]] = {
     "car":           ["car", "sedan", "suv", "hatchback", "taxi", "cab", "auto"],
 }
 
-# ─── Singleton state (XGBoost + label encoders only) ──────────────────────────
+# ─── Singleton state ───────────────────────────────────────────────────────────
 
 _lock           = threading.Lock()
 _dur_model: Any = None
 _pri_model: Any = None
 _le: dict       = {}
+_embedder: Any  = None   # fastembed TextEmbedding (ONNX, ~50MB RAM)
+
+_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 
 def _load_models() -> None:
-    global _dur_model, _pri_model, _le
+    global _dur_model, _pri_model, _le, _embedder
     if _dur_model is not None:
         return
+    import os
     import joblib
+    from fastembed import TextEmbedding
+
     _dur_model = joblib.load(MODELS_DIR / "duration_model.pkl")
     _pri_model = joblib.load(MODELS_DIR / "resource_model.pkl")
     _le        = joblib.load(MODELS_DIR / "label_encoders.pkl")
+    # cache_dir picks up the pre-baked Docker layer; falls back to ~/.cache/fastembed
+    cache_dir  = os.getenv("FASTEMBED_CACHE_DIR")
+    _embedder  = TextEmbedding(_MODEL_NAME, cache_dir=cache_dir)
 
 
 def _ensure_loaded() -> None:
@@ -219,6 +228,10 @@ def run_ml_only(
         nlp = _extract_veh_type(desc_lower)
         if nlp: veh_type = nlp
 
+    # Real 384-dim embedding via fastembed (ONNX, ~50MB RAM)
+    import numpy as np
+    emb = np.array(list(_embedder.embed([description]))[0])
+
     struct_row = {
         "hour"                 : hour,
         "day_of_week"          : day_of_week,
@@ -234,8 +247,7 @@ def run_ml_only(
         "police_station_enc"   : _safe_encode(_le["police_station"], police_station),
         "zone_enc"             : _safe_encode(_le["zone"],            zone),
     }
-    # Zero-pad embedding dims — model runs on structural features only
-    emb_row = {f"emb_{i}": 0.0 for i in range(EMB_DIM)}
+    emb_row = {f"emb_{i}": float(emb[i]) for i in range(len(emb))}
     X = pd.DataFrame([{**struct_row, **emb_row}])[ALL_FEATURES]
 
     duration_min  = float(_dur_model.predict(X)[0])
