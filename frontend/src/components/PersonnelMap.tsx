@@ -15,7 +15,8 @@ function point(latValue: number | null | undefined, lngValue: number | null | un
   const lat = Number(latValue);
   const lng = Number(lngValue);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  if (lat === 0 && lng === 0) return null; // unset — DB default, not a real location
+  if (lat < 6 || lat > 38 || lng < 68 || lng > 98) return null; // must be within India
   return { lat, lng };
 }
 
@@ -152,8 +153,17 @@ export default function PersonnelMap({
     const location = point(officer.current_latitude, officer.current_longitude);
     if (!location) return;
     window.setTimeout(() => {
-      map.setCenter?.([location.lat, location.lng]);
-      map.setZoom?.(16);
+      const center: [number, number] = [location.lat, location.lng];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const m = map as any;
+      if (typeof m.flyTo === "function") {
+        m.flyTo({ center, zoom: 16 });
+      } else if (typeof m.setView === "function") {
+        m.setView(center, 16);
+      } else {
+        map.setCenter?.(center);
+        map.setZoom?.(16);
+      }
     }, 100);
   }
 
