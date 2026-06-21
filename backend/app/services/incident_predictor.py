@@ -29,7 +29,7 @@ EMB_DIM              = 384
 TRANSFORMER_FEATURES = [f"emb_{i}" for i in range(EMB_DIM)]
 ALL_FEATURES         = STRUCT_FEATURES + TRANSFORMER_FEATURES
 
-_GEMINI_TIMEOUT_S = 8
+_GEMINI_TIMEOUT_S = 20
 
 # Keyword pre-filter — instant rejection before any API call.
 # Descriptions with none of these words cannot be traffic incidents.
