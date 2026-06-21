@@ -797,15 +797,27 @@ async def deployment_chat_ws(
     token: str | None = Query(None, description="JWT fallback — cookie is preferred"),
 ) -> None:
     """Real-time bidirectional chat between Command Centre and field officer."""
-    # Cookie is sent automatically by the browser on the WS upgrade request.
-    # The query-param token is kept as a fallback for non-browser clients.
-    ws_token = websocket.cookies.get("access_token") or token
-    if not ws_token:
+    # A browser can retain an expired cookie while the frontend has a newer
+    # query token (or vice versa). Validate both before rejecting the upgrade.
+    candidate_tokens = [
+        candidate
+        for candidate in dict.fromkeys((token, websocket.cookies.get("access_token")))
+        if candidate
+    ]
+    if not candidate_tokens:
         await websocket.close(code=4001, reason="Unauthorized")
         return
-    try:
-        user = auth_service.get_user_from_token(ws_token)
-    except AuthError:
+
+    user = None
+    for candidate in candidate_tokens:
+        try:
+            user = auth_service.get_user_from_token(candidate)
+            break
+        except AuthError:
+            continue
+
+    if user is None:
+        logger.warning("Chat WS authentication rejected: room=%s", deployment_id)
         await websocket.close(code=4001, reason="Unauthorized")
         return
 

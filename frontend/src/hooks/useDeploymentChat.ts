@@ -87,18 +87,13 @@ export function useDeploymentChat(deploymentId: string | null) {
   const connect = useCallback(() => {
     if (!deploymentId || !mountedRef.current) return;
 
-    // 1. Try localStorage token (set on login after our auth fix)
-    const stored = getStoredToken();
-    if (stored) {
-      connectWithToken(stored);
-      return;
-    }
-
-    // 2. Fallback: fetch token from backend (works for existing sessions
-    //    that predate the localStorage fix — uses the HttpOnly cookie)
+    // Prefer the token belonging to the currently validated cookie session.
+    // localStorage can outlive a JWT and otherwise cause endless 403 retries.
     api.get<{ token: string | null }>("/auth/ws-token")
       .then(r => { if (mountedRef.current) connectWithToken(r.data.token); })
-      .catch(() => { if (mountedRef.current) connectWithToken(null); });
+      .catch(() => {
+        if (mountedRef.current) connectWithToken(getStoredToken());
+      });
   }, [deploymentId, connectWithToken]);
 
   useEffect(() => {
