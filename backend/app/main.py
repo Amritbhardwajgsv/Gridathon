@@ -302,6 +302,14 @@ def me(user: AuthUserResponse = Depends(get_current_user)) -> AuthUserResponse:
     return user
 
 
+@app.get("/auth/ws-token", tags=["auth"])
+def ws_token(request: Request, user: AuthUserResponse = Depends(get_current_user)) -> dict:
+    """Return the current JWT for WebSocket auth (read from HttpOnly cookie).
+    Called by the frontend before opening a WebSocket when localStorage has no token."""
+    token = request.cookies.get("access_token")
+    return {"token": token}
+
+
 @app.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT, tags=["auth"])
 def logout(
     request: Request,
