@@ -95,8 +95,11 @@ class AuthService:
                     )
                     user = cursor.fetchone()
         except Exception as exc:
-            if "duplicate key" in str(exc).lower() or "unique" in str(exc).lower():
-                raise AuthError("An account with this email already exists") from exc
+            exc_str = str(exc).lower()
+            if "duplicate key" in exc_str or "unique" in exc_str:
+                if "badge_id" in exc_str:
+                    raise AuthError("A user with this Badge / Staff ID already exists. Please use your actual badge number.") from exc
+                raise AuthError("An account with this email already exists. Please sign in instead.") from exc
             raise AuthError("Could not create account") from exc
 
         # Notify admin that a new request is waiting for review
