@@ -197,13 +197,13 @@ export default function CitizenTrackPage() {
                 <span className="ml-3 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#444455]">STATUS TIMELINE</span>
               </div>
               <div className="p-5">
-                <ol className="relative space-y-5 border-l-2 border-[#252535] pl-6">
+                <ol className="relative space-y-5 border-l-2 border-[#252535] pl-7">
                   {STATUS_STEPS.map((step, idx) => {
                     const done   = idx <= currentStep;
                     const active = idx === currentStep;
                     return (
                       <li className="relative" key={step.key}>
-                        <span className={`absolute -left-[25px] flex h-4 w-4 items-center justify-center rounded-full border-2 ${
+                        <span className={`absolute -left-[9px] flex h-4 w-4 items-center justify-center rounded-full border-2 ${
                           done ? "border-[#10B981] bg-[#10B981]" : "border-[#252535] bg-[#08080F]"
                         }`}>
                           {done ? <CheckCircle2 className="h-3 w-3 text-[#08080F]" /> : null}
@@ -227,21 +227,27 @@ export default function CitizenTrackPage() {
             </div>
 
             {/* Police note */}
-            {result.agent_recommendation ? (
-              <div className="browser-card border-2 border-[#FFE600]/20">
-                <div className="browser-card-header border-b-2 border-[#FFE600]/20">
-                  <span className="browser-dot browser-dot-red" />
-                  <span className="browser-dot browser-dot-yellow" />
-                  <span className="browser-dot browser-dot-green" />
-                  <div className="ml-3 flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#FFE600]">
-                    <ShieldCheck className="h-3 w-3" />Police queue note
+            {result.agent_recommendation ? (() => {
+              const isRejected = result.agent_recommendation.startsWith("[FIREWALL REJECTED]");
+              return (
+                <div className={`browser-card border-2 ${isRejected ? "border-[#EF4444]/40 bg-[#EF4444]/5" : "border-[#FFE600]/20"}`}>
+                  <div className={`browser-card-header border-b-2 ${isRejected ? "border-[#EF4444]/30" : "border-[#FFE600]/20"}`}>
+                    <span className="browser-dot browser-dot-red" />
+                    <span className="browser-dot browser-dot-yellow" />
+                    <span className="browser-dot browser-dot-green" />
+                    <div className={`ml-3 flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.18em] ${isRejected ? "text-[#EF4444]" : "text-[#FFE600]"}`}>
+                      {isRejected ? <XCircle className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
+                      {isRejected ? "Firewall Rejected" : "Police queue note"}
+                    </div>
+                  </div>
+                  <div className="p-5">
+                    <p className={`text-[13px] leading-6 ${isRejected ? "text-[#FCA5A5]" : "text-[#8888A0]"}`}>
+                      {result.agent_recommendation}
+                    </p>
                   </div>
                 </div>
-                <div className="p-5">
-                  <p className="text-[13px] leading-6 text-[#8888A0]">{result.agent_recommendation}</p>
-                </div>
-              </div>
-            ) : null}
+              );
+            })() : null}
           </div>
         ) : null}
 
