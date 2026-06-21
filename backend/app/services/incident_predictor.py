@@ -74,6 +74,33 @@ _dur_model: Any = None
 _pri_model: Any = None
 _le: dict       = {}
 
+_HF_MODEL   = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+_HF_API_URL = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{_HF_MODEL}"
+
+
+def _hf_embed(text: str) -> list[float] | None:
+    """Call HuggingFace Inference API to get 384-dim embedding. Returns None on failure."""
+    import os, requests
+    key = os.getenv("HF_API_KEY", "")
+    if not key:
+        return None
+    try:
+        resp = requests.post(
+            _HF_API_URL,
+            headers={"Authorization": f"Bearer {key}"},
+            json={"inputs": text, "options": {"wait_for_model": True}},
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            # API returns list-of-lists for batched input; unwrap if needed
+            if isinstance(data[0], list):
+                return data[0]
+            return data
+    except Exception:
+        pass
+    return None
+
 
 def _load_models() -> None:
     global _dur_model, _pri_model, _le
@@ -234,7 +261,11 @@ def run_ml_only(
         "police_station_enc"   : _safe_encode(_le["police_station"], police_station),
         "zone_enc"             : _safe_encode(_le["zone"],            zone),
     }
-    emb_row = {f"emb_{i}": 0.0 for i in range(EMB_DIM)}
+    raw_emb = _hf_embed(description)
+    if raw_emb and len(raw_emb) == EMB_DIM:
+        emb_row = {f"emb_{i}": float(raw_emb[i]) for i in range(EMB_DIM)}
+    else:
+        emb_row = {f"emb_{i}": 0.0 for i in range(EMB_DIM)}
     X = pd.DataFrame([{**struct_row, **emb_row}])[ALL_FEATURES]
 
     duration_min  = float(_dur_model.predict(X)[0])
