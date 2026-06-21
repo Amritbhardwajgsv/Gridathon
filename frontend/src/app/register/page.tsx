@@ -9,6 +9,22 @@ import { registerUser } from "@/lib/auth";
 
 const RANKS = ["Constable", "Head Constable", "ASI", "SI", "Inspector", "ACP", "DCP"];
 
+const UNITS = [
+  "BTP Central Division",
+  "BTP East Division",
+  "BTP West Division",
+  "BTP North Division",
+  "BTP South Division",
+  "BTP South-East Division",
+  "BTP North-East Division",
+  "BTP Whitefield Division",
+  "BTP Electronic City Division",
+  "BTP Hebbal Division",
+  "BTP Silk Board Division",
+  "BTP Airport Division",
+  "Traffic Training School, Bengaluru",
+];
+
 export default function RegisterPage() {
   const router = useRouter();
   const [name,     setName]     = useState("");
@@ -124,7 +140,9 @@ export default function RegisterPage() {
                 </FormField>
 
                 <FormField htmlFor="reg-unit" label="Unit / station">
-                  <input className="field-dark" id="reg-unit" onChange={(e) => setUnit(e.target.value)} placeholder="BTP East Division" type="text" value={unitName} />
+                  <select className="field-dark" id="reg-unit" onChange={(e) => setUnit(e.target.value)} title="Unit / Station" value={unitName}>
+                    {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                  </select>
                 </FormField>
 
                 <FormField htmlFor="reg-pass" label="Password">
