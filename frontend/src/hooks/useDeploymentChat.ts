@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import api from "@/lib/api";
 import { getStoredToken } from "@/lib/auth";
 
 export type ChatMessage = {
@@ -9,9 +10,9 @@ export type ChatMessage = {
   deployment_id: string;
   sender_id: string;
   sender_name: string;
-  sender_role: string;   // "admin" | "operator" | "viewer"
+  sender_role: string;
   message: string;
-  sent_at: string;       // ISO string
+  sent_at: string;
 };
 
 type State = {
@@ -31,19 +32,16 @@ export function useDeploymentChat(deploymentId: string | null) {
     error: null,
   });
 
-  const wsRef        = useRef<WebSocket | null>(null);
-  const retryRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mountedRef   = useRef(true);
-  const retryCount   = useRef(0);
+  const wsRef      = useRef<WebSocket | null>(null);
+  const retryRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+  const retryCount = useRef(0);
 
-  const connect = useCallback(() => {
+  const connectWithToken = useCallback((token: string | null) => {
     if (!deploymentId || !mountedRef.current) return;
 
-    // Pass JWT as query param — HttpOnly cookies are not reliably sent on
-    // cross-origin WebSocket upgrades in all browsers/proxies.
-    const token = getStoredToken();
-    const qs    = token ? `?token=${encodeURIComponent(token)}` : "";
-    const url   = `${WS_BASE}/ws/chat/${encodeURIComponent(deploymentId)}${qs}`;
+    const qs  = token ? `?token=${encodeURIComponent(token)}` : "";
+    const url = `${WS_BASE}/ws/chat/${encodeURIComponent(deploymentId)}${qs}`;
     const ws  = new WebSocket(url);
     wsRef.current = ws;
 
@@ -65,8 +63,6 @@ export function useDeploymentChat(deploymentId: string | null) {
         } else if (data.type === "message") {
           const msg = data as unknown as ChatMessage;
           setState(s => {
-            // Guard: server often broadcasts `history` + `message` for the
-            // same event; skip the append if the id is already present.
             if (s.messages.some(m => m.id === msg.id)) return s;
             return { ...s, messages: [...s.messages, msg] };
           });
@@ -77,7 +73,6 @@ export function useDeploymentChat(deploymentId: string | null) {
     ws.onclose = () => {
       if (!mountedRef.current) return;
       setState(s => ({ ...s, connected: false }));
-      // Exponential back-off: 1s, 2s, 4s … capped at 16s
       const delay = Math.min(1000 * 2 ** retryCount.current, 16_000);
       retryCount.current += 1;
       retryRef.current = setTimeout(connect, delay);
@@ -87,7 +82,24 @@ export function useDeploymentChat(deploymentId: string | null) {
       if (!mountedRef.current) return;
       setState(s => ({ ...s, error: "Connection error — retrying…" }));
     };
-  }, [deploymentId]);
+  }, [deploymentId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const connect = useCallback(() => {
+    if (!deploymentId || !mountedRef.current) return;
+
+    // 1. Try localStorage token (set on login after our auth fix)
+    const stored = getStoredToken();
+    if (stored) {
+      connectWithToken(stored);
+      return;
+    }
+
+    // 2. Fallback: fetch token from backend (works for existing sessions
+    //    that predate the localStorage fix — uses the HttpOnly cookie)
+    api.get<{ token: string | null }>("/auth/ws-token")
+      .then(r => { if (mountedRef.current) connectWithToken(r.data.token); })
+      .catch(() => { if (mountedRef.current) connectWithToken(null); });
+  }, [deploymentId, connectWithToken]);
 
   useEffect(() => {
     mountedRef.current = true;
