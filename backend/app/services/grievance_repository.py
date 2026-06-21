@@ -327,7 +327,7 @@ class GrievanceRepository:
         return CitizenGrievanceResponse(**row) if row else None
 
     def validate_async(self, tracking_id: str, description: str) -> None:
-        """Background task: run Gemini firewall and flag the record if rejected.
+        """Background task: run Gemini firewall and delete the record if rejected.
         Called after the HTTP response has already been sent, so latency doesn't matter."""
         import logging
         import app.services.incident_predictor as _predictor
@@ -336,20 +336,16 @@ class GrievanceRepository:
             is_valid, reason = _predictor.llm_firewall(description)
             if is_valid:
                 return
-            # Gemini rejected — stamp the recommendation so operators can see it
+            # Gemini rejected — delete the complaint entirely
             import psycopg
             with psycopg.connect(self.database_url, row_factory=dict_row) as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        """
-                        update citizen_grievances
-                        set agent_recommendation = %s
-                        where upper(tracking_id) = upper(%s)
-                        """,
-                        (f"[FIREWALL REJECTED] {reason}", tracking_id),
+                        "delete from citizen_grievances where upper(tracking_id) = upper(%s)",
+                        (tracking_id,),
                     )
             cache.delete(GRIEVANCES_LIST)
-            log.info("Firewall async rejected %s: %s", tracking_id, reason)
+            log.info("Firewall async deleted %s (not a traffic incident): %s", tracking_id, reason)
         except Exception as exc:
             log.warning("Async firewall check failed for %s: %s", tracking_id, exc)
 
