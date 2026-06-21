@@ -114,6 +114,90 @@ def send_approval_email(
         logger.warning("Could not send approval email to %s: %s", to_email, exc)
 
 
+def send_new_request_email(
+    admin_email: str,
+    applicant_name: str,
+    applicant_email: str,
+    badge_id: str | None,
+    rank: str | None,
+    unit_name: str | None,
+    role: str,
+) -> None:
+    """Notify the admin that a new access request is waiting for review."""
+    cfg = get_smtp_config()
+    if not cfg.get("host") or not cfg.get("user"):
+        logger.info("SMTP not configured — new-request notification NOT sent to admin.")
+        return
+
+    role_label = _ROLE_LABEL.get(role, role)
+    badge_line = f"<p style='margin:0 0 8px 0;font-size:13px;'><b style='color:#e8a034;'>Badge ID:</b> <span style='color:#f5f7fb;'>{badge_id}</span></p>" if badge_id else ""
+    rank_line  = f"<p style='margin:0 0 8px 0;font-size:13px;'><b style='color:#e8a034;'>Rank:</b> <span style='color:#f5f7fb;'>{rank}</span></p>" if rank else ""
+    unit_line  = f"<p style='margin:0 0 8px 0;font-size:13px;'><b style='color:#e8a034;'>Unit / Station:</b> <span style='color:#f5f7fb;'>{unit_name}</span></p>" if unit_name else ""
+
+    html = f"""
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#0a0c0f;font-family:monospace,sans-serif;color:#dce2ea;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 16px;">
+      <table width="520" cellpadding="0" cellspacing="0" style="background:#141820;border:1px solid #252b35;border-radius:6px;overflow:hidden;">
+        <tr style="background:#0a0c0f;border-bottom:2px solid #e8a034;">
+          <td style="padding:18px 28px;">
+            <span style="color:#e8a034;font-weight:bold;font-size:15px;letter-spacing:3px;">DRISHTI</span>
+            <span style="color:#707987;font-size:11px;margin-left:8px;">BLR-OPS · Command Centre</span>
+          </td>
+        </tr>
+        <tr><td style="padding:32px 28px;">
+          <p style="font-size:13px;color:#9ba5b3;margin:0 0 6px 0;letter-spacing:1px;text-transform:uppercase;">Action Required</p>
+          <h2 style="margin:0 0 24px 0;color:#f5f7fb;font-size:22px;font-weight:600;">New access request pending review</h2>
+
+          <table cellpadding="0" cellspacing="0" style="width:100%;background:#10141b;border:1px solid #252b35;border-radius:4px;margin-bottom:24px;">
+            <tr><td style="padding:16px 20px;">
+              <p style="margin:0 0 8px 0;font-size:13px;"><b style="color:#e8a034;">Name:</b> <span style="color:#f5f7fb;">{applicant_name}</span></p>
+              <p style="margin:0 0 8px 0;font-size:13px;"><b style="color:#e8a034;">Email:</b> <span style="color:#f5f7fb;">{applicant_email}</span></p>
+              {badge_line}
+              {rank_line}
+              {unit_line}
+              <p style="margin:0;font-size:13px;"><b style="color:#e8a034;">Role:</b> <span style="color:#19b7a5;">{role_label}</span></p>
+            </td></tr>
+          </table>
+
+          <p style="font-size:13px;color:#9ba5b3;line-height:1.7;margin:0 0 24px 0;">
+            Log in to the DRISHTI Command Centre dashboard and navigate to
+            <b style="color:#f5f7fb;">Access Requests</b> to approve or reject this application.
+          </p>
+
+          <p style="font-size:11px;color:#505866;margin:0;border-top:1px solid #252b35;padding-top:16px;">
+            This is an automated notification from DRISHTI Ops. Do not reply to this email.
+            — Bengaluru Traffic Police · DRISHTI System
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+"""
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"DRISHTI · New Access Request — {applicant_name} ({role_label})"
+    msg["From"]    = cfg["from"]
+    msg["To"]      = admin_email
+    msg.attach(MIMEText(
+        f"New access request from {applicant_name} ({applicant_email})\n"
+        f"Role: {role_label}\n"
+        + (f"Badge: {badge_id}\n" if badge_id else "")
+        + "\nLog in to DRISHTI and go to Access Requests to approve or reject.",
+        "plain",
+    ))
+    msg.attach(MIMEText(html, "html"))
+
+    try:
+        _smtp_send(cfg, admin_email, msg)
+        logger.info("New-request notification sent to admin %s for applicant %s", admin_email, applicant_email)
+    except Exception as exc:
+        logger.warning("Could not send new-request notification: %s", exc)
+
+
 def send_rejection_email(
     to_email: str,
     name: str,

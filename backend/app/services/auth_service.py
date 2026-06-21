@@ -99,6 +99,26 @@ class AuthService:
                 raise AuthError("An account with this email already exists") from exc
             raise AuthError("Could not create account") from exc
 
+        # Notify admin that a new request is waiting for review
+        try:
+            import os
+            from app.services.email_service import send_new_request_email
+            admin_email = os.getenv("ADMIN_EMAIL") or os.getenv("SMTP_USER")
+            if admin_email:
+                send_new_request_email(
+                    admin_email     = admin_email,
+                    applicant_name  = payload.name.strip(),
+                    applicant_email = normalized_email,
+                    badge_id        = payload.badge_id,
+                    rank            = payload.rank,
+                    unit_name       = payload.unit_name,
+                    role            = payload.role,
+                )
+        except Exception as exc:
+            # Non-fatal — registration still succeeds even if email fails
+            import logging
+            logging.getLogger(__name__).warning("Admin notification email failed: %s", exc)
+
         return self._user_response(user)
 
     def login(self, payload: LoginRequest) -> TokenResponse:
