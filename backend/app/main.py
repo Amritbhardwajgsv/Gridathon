@@ -98,6 +98,9 @@ _chat_mgr = _DeploymentChatManager()
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: object) -> Response:
+        # BaseHTTPMiddleware can't return a Response for WebSocket — pass straight through
+        if request.scope.get("type") == "websocket":
+            return await call_next(request)
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
         request.state.request_id = request_id
         start = time.perf_counter()
@@ -128,6 +131,8 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: object) -> Response:
+        if request.scope.get("type") == "websocket":
+            return await call_next(request)
         try:
             response: Response = await call_next(request)
         except Exception:
@@ -160,6 +165,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             del self._buckets[ip]
 
     async def dispatch(self, request: Request, call_next: object) -> Response:
+        # WebSocket upgrades are long-lived connections — exempt from rate limiting
+        if request.scope.get("type") == "websocket":
+            return await call_next(request)
         if request.url.path in self._EXEMPT:
             return await call_next(request)
 
@@ -213,16 +221,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-_raw_origins = os.getenv(
-    "ALLOWED_ORIGINS",
-    "http://localhost:3000,http://localhost:3001",
-)
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "")
 _allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+# If no origins configured (e.g. first deploy), allow all — set ALLOWED_ORIGINS to lock down.
+_allow_all = not _allowed_origins
+if _allow_all:
+    logger.warning("ALLOWED_ORIGINS not set — allowing all origins (set env var to restrict)")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allowed_origins,
-    allow_credentials=True,
+    allow_origins=["*"] if _allow_all else _allowed_origins,
+    allow_credentials=not _allow_all,  # credentials require explicit origins, not wildcard
     allow_methods=["*"],
     allow_headers=["*"],
 )
