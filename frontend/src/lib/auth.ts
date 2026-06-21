@@ -9,7 +9,8 @@ import type {
   UserRole
 } from "@/types/prediction";
 
-const USER_STORAGE_KEY = "drishti_user";
+const USER_STORAGE_KEY  = "drishti_user";
+const TOKEN_STORAGE_KEY = "drishti_token";
 const HISTORY_STORAGE_KEY = "prediction_history";
 
 const isBrowser = typeof window !== "undefined";
@@ -75,18 +76,23 @@ export async function logoutUser(): Promise<void> {
   }
 }
 
+export function getStoredToken(): string | null {
+  if (!isBrowser) return null;
+  return window.localStorage.getItem(TOKEN_STORAGE_KEY);
+}
+
 function storeSession(response: TokenResponse): void {
-  // Token goes into the HttpOnly cookie set by the server.
-  // Only store the non-sensitive user profile for UI display.
   window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(response.user));
+  // Store token for WebSocket auth (HttpOnly cookie isn't sent cross-origin on WS upgrades)
+  if (response.access_token) {
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, response.access_token);
+  }
 }
 
 function clearSession(): void {
-  if (!isBrowser) {
-    return;
-  }
-
+  if (!isBrowser) return;
   window.localStorage.removeItem(USER_STORAGE_KEY);
+  window.localStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
 export function getPredictionHistory(): PredictionHistoryItem[] {
