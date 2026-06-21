@@ -80,9 +80,11 @@ _HF_API_URL = f"https://api-inference.huggingface.co/pipeline/feature-extraction
 
 def _hf_embed(text: str) -> list[float] | None:
     """Call HuggingFace Inference API to get 384-dim embedding. Returns None on failure."""
-    import os, requests
+    import logging, os, requests
+    log = logging.getLogger("drishti.hf")
     key = os.getenv("HF_API_KEY", "")
     if not key:
+        log.warning("HF_API_KEY not set — using zero embeddings")
         return None
     try:
         resp = requests.post(
@@ -94,11 +96,12 @@ def _hf_embed(text: str) -> list[float] | None:
         if resp.status_code == 200:
             data = resp.json()
             # API returns list-of-lists for batched input; unwrap if needed
-            if isinstance(data[0], list):
-                return data[0]
-            return data
-    except Exception:
-        pass
+            vec = data[0] if isinstance(data[0], list) else data
+            log.info("HuggingFace embedding OK — %d dims", len(vec))
+            return vec
+        log.warning("HuggingFace API returned %s: %s", resp.status_code, resp.text[:200])
+    except Exception as exc:
+        log.warning("HuggingFace API error: %s", exc)
     return None
 
 
