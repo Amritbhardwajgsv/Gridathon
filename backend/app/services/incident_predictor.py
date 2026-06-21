@@ -34,13 +34,15 @@ _GEMINI_TIMEOUT_S = 8
 # Keyword pre-filter — instant rejection before any API call.
 # Descriptions with none of these words cannot be traffic incidents.
 _TRAFFIC_KEYWORDS = frozenset([
-    # English
+    # English — specific to road traffic incidents
     "traffic", "road", "accident", "vehicle", "car", "truck", "bus", "bike", "auto",
-    "signal", "junction", "jam", "block", "congestion", "diversion", "closure",
-    "breakdown", "stalled", "crash", "collision", "pothole", "barricade", "police",
-    "highway", "flyover", "underpass", "construction", "flood", "waterlog", "tree",
-    "fallen", "lane", "parking", "tow", "ambulance", "fire", "lorry", "tanker",
-    "convoy", "vip", "rally", "protest", "procession", "event", "concert",
+    "signal failure", "traffic signal", "traffic jam", "road block", "road closure",
+    "road construction", "road work", "jam", "congestion", "diversion",
+    "breakdown", "stalled", "crash", "collision", "pothole", "barricade",
+    "highway", "flyover", "underpass", "flood", "waterlog", "waterlogging",
+    "tree fell", "fallen tree", "tree fall", "lane blocked", "lane closed",
+    "tow truck", "ambulance", "fire engine", "lorry", "tanker",
+    "convoy", "vip movement", "rally", "protest march", "procession",
     # Kannada transliterated
     "raste", "rasthe", "mara", "apagata", "vahana", "jama",
 ])
