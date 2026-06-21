@@ -197,12 +197,12 @@ export default function CitizenTrackPage() {
                 <span className="ml-3 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#444455]">STATUS TIMELINE</span>
               </div>
               <div className="p-5">
-                <ol className="relative space-y-5 border-l-2 border-[#252535] pl-7">
+                <ol className="relative space-y-5 border-l-2 border-[#252535]">
                   {STATUS_STEPS.map((step, idx) => {
                     const done   = idx <= currentStep;
                     const active = idx === currentStep;
                     return (
-                      <li className="relative" key={step.key}>
+                      <li className="relative pl-7" key={step.key}>
                         <span className={`absolute -left-[9px] flex h-4 w-4 items-center justify-center rounded-full border-2 ${
                           done ? "border-[#10B981] bg-[#10B981]" : "border-[#252535] bg-[#08080F]"
                         }`}>
