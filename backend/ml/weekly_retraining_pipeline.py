@@ -418,12 +418,13 @@ def save_artifacts(result: dict[str, Any], output_dir: Path) -> dict[str, str]:
     output_dir.mkdir(parents=True, exist_ok=True)
     model_version = datetime.now(timezone.utc).strftime("weekly-%Y%m%d%H%M%S")
 
-    # Versioned copies — kept for rollback history
-    duration_path         = output_dir / f"duration_model_{model_version}.pkl"
-    impact_path           = output_dir / f"impact_model_{model_version}.pkl"
+    # RF models use rf_ prefix to avoid overwriting the XGBoost models
+    # (duration_model.pkl and resource_model.pkl are XGBoost — do not touch them)
+    duration_path         = output_dir / f"rf_duration_model_{model_version}.pkl"
+    impact_path           = output_dir / f"rf_impact_model_{model_version}.pkl"
     metrics_path          = output_dir / f"metrics_{model_version}.json"
-    duration_columns_path = output_dir / f"duration_feature_columns_{model_version}.json"
-    impact_columns_path   = output_dir / f"impact_feature_columns_{model_version}.json"
+    duration_columns_path = output_dir / f"rf_duration_feature_columns_{model_version}.json"
+    impact_columns_path   = output_dir / f"rf_impact_feature_columns_{model_version}.json"
 
     joblib.dump(result["duration_model"], duration_path)
     joblib.dump(result["impact_model"],   impact_path)
@@ -431,13 +432,13 @@ def save_artifacts(result: dict[str, Any], output_dir: Path) -> dict[str, str]:
     duration_columns_path.write_text(json.dumps(MODEL_FEATURES), encoding="utf-8")
     impact_columns_path.write_text(json.dumps(MODEL_FEATURES), encoding="utf-8")
 
-    # Unversioned copies — these are what production loads at runtime
-    joblib.dump(result["duration_model"], output_dir / "duration_model.pkl")
-    joblib.dump(result["impact_model"],   output_dir / "impact_model.pkl")
-    (output_dir / "duration_feature_columns.json").write_text(
+    # Unversioned RF copies — loaded by grievance_agent RF fallback
+    joblib.dump(result["duration_model"], output_dir / "rf_duration_model.pkl")
+    joblib.dump(result["impact_model"],   output_dir / "rf_impact_model.pkl")
+    (output_dir / "rf_duration_feature_columns.json").write_text(
         json.dumps(MODEL_FEATURES), encoding="utf-8"
     )
-    (output_dir / "impact_feature_columns.json").write_text(
+    (output_dir / "rf_impact_feature_columns.json").write_text(
         json.dumps(MODEL_FEATURES), encoding="utf-8"
     )
 
