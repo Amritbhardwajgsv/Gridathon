@@ -205,6 +205,10 @@ def _get_urgency(priority_pred: int, duration_min: float, road_closure: bool, ev
 # ─── LLM Firewall (keyword → Gemini, no local model) ─────────────────────────
 
 def _keyword_prefilter(description: str) -> bool:
+    # If description contains non-ASCII characters (Kannada, Hindi, etc.)
+    # skip keyword check and let Gemini decide — it handles Indian scripts natively
+    if any(ord(c) > 127 for c in description):
+        return True
     lowered = description.lower()
     return any(kw in lowered for kw in _TRAFFIC_KEYWORDS)
 
@@ -239,10 +243,11 @@ def llm_firewall(description: str) -> tuple[bool, str]:
                     "You are a spam filter for a Bengaluru traffic reporting app. "
                     "Citizens report issues like traffic jams, accidents, potholes, signal failures, "
                     "road blocks, vehicle breakdowns, flooding, illegal parking, or anything affecting "
-                    "roads and public movement — including vague or informal descriptions in any language. "
+                    "roads and public movement. "
+                    "Descriptions may be in Kannada (ಕನ್ನಡ), Hindi, English, or a mix — treat all equally. "
                     "Reply ONLY with YES if this could plausibly be a road/traffic/vehicle/public-safety "
-                    "related complaint (even if vague or brief). "
-                    "Reply NO only if it is clearly unrelated spam (e.g. food, shopping, personal disputes).\n\n"
+                    "related complaint (even if vague, brief, or in a local language). "
+                    "Reply NO only if it is clearly unrelated spam (e.g. food delivery, shopping, personal disputes).\n\n"
                     f"Description: {description[:500]}"
                 ),
             )
