@@ -95,89 +95,35 @@ def _hf_status() -> dict:
 
 
 def _hf_embed(text: str) -> list[float] | None:
-    """Call HuggingFace Inference API for a 384-dim sentence embedding.
-
-    Logs clearly at every decision point so you can tell from the server
-    log exactly whether real embeddings or zero-padding is being used.
-    Returns None on any failure; caller falls back to zero-padding.
-    """
+    """Call HuggingFace Inference API for a 384-dim sentence embedding via InferenceClient."""
     import os
-    import requests
-
     key = os.getenv("HF_API_KEY", "")
     if not key:
-        _hf_log.warning(
-            "HF_API_KEY not set — XGBoost text signal DISABLED; "
-            "all embedding features will be zero. "
-            "Set HF_API_KEY in Render env vars to enable semantic embeddings."
-        )
+        _hf_log.warning("HF_API_KEY not set — embeddings disabled, using zero-padding.")
         return None
 
-    _hf_log.info(
-        "HuggingFace embed request: model=%s text_len=%d chars",
-        _HF_MODEL, len(text),
-    )
+    _hf_log.info("HuggingFace embed request: model=%s text_len=%d chars", _HF_MODEL, len(text))
     try:
-        resp = requests.post(
-            _HF_API_URL,
-            headers={"Authorization": f"Bearer {key}"},
-            json={"inputs": text, "options": {"wait_for_model": True}},
-            timeout=15,
-        )
+        from huggingface_hub import InferenceClient
+        client = InferenceClient(model=_HF_MODEL, token=key)
+        result = client.feature_extraction(text, normalize=True)
 
-        if resp.status_code == 200:
-            data = resp.json()
-            vec = data[0] if isinstance(data[0], list) else data
-            if not isinstance(vec, list) or len(vec) != EMB_DIM:
-                _hf_log.error(
-                    "HuggingFace returned unexpected shape: expected list[%d], got %s len=%s "
-                    "— falling back to zero embeddings",
-                    EMB_DIM, type(vec).__name__, len(vec) if isinstance(vec, list) else "?",
-                )
-                return None
-            _hf_log.info("HuggingFace embed OK: dims=%d", len(vec))
-            return vec
+        vec = result.tolist() if hasattr(result, "tolist") else list(result)
+        # feature_extraction may return [[...]] or [...]
+        if vec and isinstance(vec[0], list):
+            vec = vec[0]
 
-        if resp.status_code == 401:
+        if len(vec) != EMB_DIM:
             _hf_log.error(
-                "HuggingFace auth FAILED (401) — HF_API_KEY is set but rejected. "
-                "Regenerate your token at huggingface.co/settings/tokens. "
-                "Falling back to zero embeddings."
+                "HuggingFace unexpected dims: expected %d got %d — zero-padding.", EMB_DIM, len(vec)
             )
-        elif resp.status_code == 503:
-            _hf_log.warning(
-                "HuggingFace model still loading (503) — request is queued server-side; "
-                "wait_for_model=True is set but timed out. Falling back to zero embeddings."
-            )
-        elif resp.status_code == 429:
-            _hf_log.warning(
-                "HuggingFace rate limit hit (429) — free tier exhausted. "
-                "Consider upgrading to Inference Endpoints. Falling back to zero embeddings."
-            )
-        else:
-            _hf_log.warning(
-                "HuggingFace API returned HTTP %s: %s — falling back to zero embeddings",
-                resp.status_code, resp.text[:300],
-            )
-        return None
+            return None
 
-    except requests.Timeout:
-        _hf_log.warning(
-            "HuggingFace request timed out after 15s — model may be cold-starting. "
-            "Falling back to zero embeddings. If this is frequent, increase timeout or "
-            "use a dedicated Inference Endpoint."
-        )
-        return None
-    except requests.ConnectionError as exc:
-        _hf_log.error(
-            "HuggingFace connection error — network unreachable? error=%s "
-            "Falling back to zero embeddings.", exc,
-        )
-        return None
+        _hf_log.info("HuggingFace embed OK: dims=%d", len(vec))
+        return vec
+
     except Exception as exc:
-        _hf_log.error(
-            "HuggingFace unexpected error: %s — falling back to zero embeddings", exc,
-        )
+        _hf_log.error("HuggingFace embed failed: %s — zero-padding.", exc)
         return None
 
 
@@ -281,7 +227,7 @@ def llm_firewall(description: str) -> tuple[bool, str]:
 
         def _call_gemini() -> str:
             response = client.models.generate_content(
-                model    = "gemini-2.0-flash-lite-001",
+                model    = "gemini-2.0-flash",
                 contents = (
                     "Is the following description about a road traffic incident "
                     "(breakdown, accident, congestion, tree fall, signal failure, flooding, etc.)? "
