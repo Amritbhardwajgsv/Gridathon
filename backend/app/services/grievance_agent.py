@@ -56,6 +56,45 @@ _PRIORITY: dict[str, str] = {
     "illegal_parking":       "Low",
     "other":                 "Low",
 }
+
+# NLP-based complaint type detection from description text
+# Used when complaint_type == "other" (citizen form always sends "other")
+_NLP_CAUSE_MAP: dict[str, tuple[str, str]] = {
+    # keyword → (cause_grouped, priority)
+    "accident":   ("accident",        "High"),
+    "crash":      ("accident",        "High"),
+    "collision":  ("accident",        "High"),
+    "toppled":    ("accident",        "High"),
+    "overturned": ("accident",        "High"),
+    "dies":       ("accident",        "High"),
+    "died":       ("accident",        "High"),
+    "dead":       ("accident",        "High"),
+    "killed":     ("accident",        "High"),
+    "fire":       ("accident",        "High"),
+    "blocked":    ("road_conditions", "High"),
+    "road block": ("road_conditions", "High"),
+    "closed":     ("road_conditions", "High"),
+    "flooding":   ("water_logging",   "High"),
+    "waterlog":   ("water_logging",   "High"),
+    "tree fall":  ("tree_fall",       "High"),
+    "tree down":  ("tree_fall",       "High"),
+    "signal":     ("others",          "Medium"),
+    "breakdown":  ("vehicle_breakdown","Medium"),
+    "stalled":    ("vehicle_breakdown","Medium"),
+    "protest":    ("procession",      "Medium"),
+    "rally":      ("procession",      "Medium"),
+    "event":      ("public_event",    "Medium"),
+}
+
+def _detect_complaint_type(description: str | None) -> tuple[str, str]:
+    """Return (cause_grouped, priority) inferred from description text."""
+    if not description:
+        return "others", "Low"
+    desc = description.lower()
+    for keyword, (cause, priority) in _NLP_CAUSE_MAP.items():
+        if keyword in desc:
+            return cause, priority
+    return "others", "Low"
 _ZONE: dict[str, str] = {
     "central zone": "Central Zone 1", "east zone": "East Zone 1",
     "west zone": "West Zone 1",       "north zone": "North Zone 1",
@@ -151,6 +190,13 @@ def triage_grievance(payload: CitizenGrievanceCreateRequest) -> tuple[int, str, 
     now = datetime.now(timezone.utc)
     road_closure = _has_road_closure(payload.complaint_type, payload.description)
 
+    # citizen form always sends complaint_type="other" — infer from description
+    effective_cause, effective_priority = (
+        (_CAUSE.get(payload.complaint_type, "others"), _PRIORITY.get(payload.complaint_type, "Low"))
+        if payload.complaint_type != "other"
+        else _detect_complaint_type(payload.description)
+    )
+
     ml_pred: dict | None = None
 
     # ── Try XGBoost (new models) ──────────────────────────────────────────────
@@ -176,9 +222,9 @@ def triage_grievance(payload: CitizenGrievanceCreateRequest) -> tuple[int, str, 
         score = min(100, _SEV_SCORE[severity] + min(8, int(duration_min / 30)))
     elif _RF_LOADED:
         row = pd.DataFrame([{
-            "event_cause_grouped":   _CAUSE.get(payload.complaint_type, "others"),
+            "event_cause_grouped":   effective_cause,
             "event_type":            "unplanned",
-            "priority":              _PRIORITY.get(payload.complaint_type, "Low"),
+            "priority":              effective_priority,
             "requires_road_closure": str(road_closure),   # encoder trained on "True"/"False" strings
             "corridor":              _map_corridor(payload.corridor),
             "zone":                  _map_zone(payload.zone),
