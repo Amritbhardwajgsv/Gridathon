@@ -17,12 +17,20 @@ MODEL_FEATURE_KEYS = {
     "hour",
     "day_of_week",
     "month",
+    "is_weekend",
+    "rush_hour",
 }
+
+_RUSH_HOURS = frozenset({7, 8, 9, 17, 18, 19, 20})
 
 
 def model_input_dict(payload: ImpactPredictionRequest) -> dict[str, Any]:
     data = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
-    return {key: data[key] for key in MODEL_FEATURE_KEYS}
+    base = {key: data[key] for key in MODEL_FEATURE_KEYS - {"is_weekend", "rush_hour"}}
+    # Derived features — not in payload, computed from existing fields
+    base["is_weekend"] = int(payload.day_of_week >= 5)
+    base["rush_hour"]  = int(payload.hour in _RUSH_HOURS)
+    return base
 
 
 def resolve_pipeline_mode(payload: ImpactPredictionRequest) -> str:

@@ -23,7 +23,8 @@ type State = {
 
 const WS_BASE =
   (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000")
-    .replace(/^http/, "ws");   // http→ws, https→wss
+    .replace(/\/+$/, "")      // strip any trailing slashes — env var may have one
+    .replace(/^http/, "ws");  // http→ws, https→wss
 
 export function useDeploymentChat(deploymentId: string | null) {
   const [state, setState] = useState<State>({
