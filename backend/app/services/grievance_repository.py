@@ -153,6 +153,16 @@ class GrievanceRepository:
         import app.services.incident_predictor as _predictor
 
         try:
+            # Step 0: translate non-English descriptions to English
+            original_description = payload.description or ""
+            english_description = _predictor.translate_to_english(original_description)
+            if english_description != original_description:
+                logger.info(
+                    "Translated complaint %s from non-English: %r → %r",
+                    tracking_id, original_description[:80], english_description[:80],
+                )
+                payload = payload.model_copy(update={"description": english_description})
+
             # Step 1: keyword pre-filter — instant, no network
             if not _predictor._keyword_prefilter(payload.description or ""):
                 self._delete_grievance(tracking_id, "not a traffic incident (keyword pre-filter)")
@@ -192,6 +202,7 @@ class GrievanceRepository:
                         update citizen_grievances set
                             severity                = %(severity)s,
                             status                  = 'submitted',
+                            description             = %(description)s,
                             latitude                = %(latitude)s,
                             longitude               = %(longitude)s,
                             geocoding_provider      = %(geocoding_provider)s,
@@ -211,6 +222,7 @@ class GrievanceRepository:
                         {
                             "tracking_id"          : tracking_id,
                             "severity"             : computed_severity,
+                            "description"          : payload.description,
                             "latitude"             : payload_data.get("latitude"),
                             "longitude"            : payload_data.get("longitude"),
                             "geocoding_provider"   : "mapmyindia" if geocode_result else None,

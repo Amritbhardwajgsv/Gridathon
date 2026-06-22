@@ -202,6 +202,47 @@ def _get_urgency(priority_pred: int, duration_min: float, road_closure: bool, ev
     return "LOW"
 
 
+# ─── Translation (Kannada / Hindi → English via Gemini) ──────────────────────
+
+def translate_to_english(text: str) -> str:
+    """Translate text to English using Gemini if it contains non-ASCII characters.
+    Returns the original text unchanged if it is already ASCII (English).
+    Falls back to original on any error so the pipeline never breaks.
+    """
+    if not any(ord(c) > 127 for c in text):
+        return text  # already English / ASCII
+
+    load_env_file()
+    key = get_gemini_api_key()
+    if not key:
+        return text
+
+    try:
+        import concurrent.futures
+        from google import genai
+
+        client = genai.Client(api_key=key)
+
+        def _translate() -> str:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-lite",
+                contents=(
+                    "Translate the following text to English. "
+                    "Return ONLY the translated English text, nothing else. "
+                    "Preserve place names and road names as-is.\n\n"
+                    f"Text: {text[:600]}"
+                ),
+            )
+            return (response.text or "").strip()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            translated = ex.submit(_translate).result(timeout=_GEMINI_TIMEOUT_S)
+
+        return translated if translated else text
+    except Exception:
+        return text
+
+
 # ─── LLM Firewall (keyword → Gemini, no local model) ─────────────────────────
 
 def _keyword_prefilter(description: str) -> bool:
