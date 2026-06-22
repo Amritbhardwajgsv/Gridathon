@@ -723,22 +723,21 @@ def officer_file_grievance(
 )
 @limiter.limit("5/minute")
 def create_citizen_grievance(
-    request: CitizenGrievanceCreateRequest,
+    body: CitizenGrievanceCreateRequest,
     background_tasks: BackgroundTasks,
-    http_request: Request,
+    request: Request,
 ) -> CitizenGrievanceResponse:
     try:
-        result = grievance_repository.create_instant(request)
-        payload_dict = request.model_dump()
+        result = grievance_repository.create_instant(body)
+        payload_dict = body.model_dump()
         try:
             from app.tasks import process_grievance
             process_grievance.delay(result.tracking_id, payload_dict)
         except Exception:
-            # Redis unavailable — fall back to FastAPI BackgroundTasks
             background_tasks.add_task(
                 grievance_repository.process_async,
                 result.tracking_id,
-                request,
+                body,
             )
         return result
     except GrievanceRejectedError as exc:
@@ -828,7 +827,7 @@ def public_incidents_map() -> list[dict]:
                     """
                 )
                 rows = cur.fetchall()
-    except RuntimeError:
+    except Exception:
         return []
     return [
         {
