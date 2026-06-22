@@ -717,6 +717,56 @@ def recent_public_incidents() -> list[dict]:
     ]
 
 
+class _ChatRequest(BaseModel):
+    message: str
+
+@app.post("/citizen/chat", tags=["citizen"])
+async def citizen_chat(body: _ChatRequest) -> dict:
+    """Gemini-powered assistant that answers questions about how DRISHTI works."""
+    msg = body.message.strip()[:600]
+    if not msg:
+        return {"reply": "Please ask me something about DRISHTI."}
+
+    from app.core.config import get_gemini_api_key, load_env_file
+    load_env_file()
+    key = get_gemini_api_key()
+    if not key:
+        return {"reply": "The assistant is temporarily unavailable. Please try again later."}
+
+    _SYSTEM = (
+        "You are DRISHTI Assistant — the AI helper for Bengaluru Traffic Police's DRISHTI platform. "
+        "Only answer questions related to DRISHTI. If asked anything unrelated, politely redirect.\n\n"
+        "ABOUT DRISHTI:\n"
+        "• Citizens report traffic incidents at /citizen/grievance — no login needed. Just describe what happened in plain language.\n"
+        "• DRISHTI uses NLP to extract cause, vehicle type, road impact, urgency, and location automatically.\n"
+        "• An XGBoost ML model (trained on 2,718 real Bengaluru incidents) predicts priority, estimated resolution time, and officer strength.\n"
+        "• Google Gemini AI validates reports are genuine traffic incidents and filters spam automatically.\n"
+        "• Spam or invalid complaints are permanently deleted. Valid complaints are sent to police workflow.\n"
+        "• Every submission gets an instant tracking ID (format: DRS-BTP-XXXXXXXXXX). Track at /citizen/track.\n"
+        "• Police Command (Admin role) reviews structured cases, uses ML forecasts, and dispatches nearest officers via GPS.\n"
+        "• Field Officers (Operator role) get live assignments, GPS beacon, Mappls navigation, and command chat.\n"
+        "• Viewers get read-only analytics and severity distribution reports.\n"
+        "• Request police access at /register.\n"
+        "• The platform covers Bengaluru — one of the world's most congested cities.\n"
+        "• DRISHTI = Dynamic Resource Intelligence for Smart Traffic and Highway Intelligence.\n\n"
+        "Reply in 2–3 short, friendly sentences. Be direct and helpful."
+    )
+
+    try:
+        from google import genai
+        client = genai.Client(api_key=key)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=f"{_SYSTEM}\n\nUser question: {msg}",
+        )
+        reply = (response.text or "").strip()
+        return {"reply": reply or "I'm here to help — ask me anything about DRISHTI!"}
+    except Exception as exc:
+        import logging
+        logging.getLogger("drishti.chat").warning("Chatbot Gemini error: %s", exc)
+        return {"reply": "I'm having a moment — please try again shortly."}
+
+
 @app.get("/citizen/grievances/{tracking_id}", response_model=CitizenGrievanceResponse, tags=["citizen"])
 def track_citizen_grievance(tracking_id: str) -> CitizenGrievanceResponse:
     grievance = grievance_repository.get_by_tracking_id(tracking_id)

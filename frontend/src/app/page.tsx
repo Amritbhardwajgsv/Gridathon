@@ -31,6 +31,8 @@ export const metadata: Metadata = {
 
 import DescriptionPipelinePreview from "@/components/DescriptionPipelinePreview";
 import RecentIncidentsFeed from "@/components/RecentIncidentsFeed";
+import ScrollAnimationsProvider from "@/components/ScrollAnimationsProvider";
+import DrishtiChatbot from "@/components/DrishtiChatbot";
 
 export default function HomePage() {
   return (
@@ -140,7 +142,7 @@ export default function HomePage() {
             </div>
 
             {/* Hero browser-window card */}
-            <div className="flex items-center justify-center">
+            <div className="flex items-center justify-center float-card">
               <DescriptionPipelinePreview />
               <div className="hidden">
                 {/* Browser dots header */}
@@ -207,7 +209,7 @@ export default function HomePage() {
       {/* ── ADL-style yellow search bar CTA ─────────────────────────────────── */}
       <section className="border-b-2 border-[#252535] px-6 py-10">
         <div className="mx-auto max-w-4xl">
-          <div className="flex items-center gap-4 rounded-full border-2 border-[#FFE600] bg-[#FFE600] px-6 py-4">
+          <div className="shimmer-sweep flex items-center gap-4 rounded-full border-2 border-[#FFE600] bg-[#FFE600] px-6 py-4">
             <Siren className="h-5 w-5 text-[#08080F] shrink-0" />
             <span className="flex-1 font-mono text-[13px] font-bold uppercase tracking-[0.12em] text-[#08080F]">
               WHAT HAPPENS WHEN A TRAFFIC CRISIS HITS A CITY OF 10 MILLION?
@@ -275,7 +277,7 @@ export default function HomePage() {
             </h2>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4" data-stagger>
             {[
               { n: "01", phase: "Describe the problem", desc: "The citizen writes one detailed account of what is happening. No technical fields or operational decisions are required.", color: "text-[#FFE600]", border: "border-[#FFE600]/30", dot: "bg-[#FFE600]" },
               { n: "02", phase: "NLP extraction", desc: "DRISHTI reads the description and derives cause, vehicle type, road impact, urgency, and other structured fields.", color: "text-[#22D3EE]", border: "border-[#22D3EE]/30", dot: "bg-[#22D3EE]" },
@@ -388,7 +390,7 @@ export default function HomePage() {
               Everything a<br />command room needs.
             </h2>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-stagger>
             {[
               { icon: BrainCircuit, title: "Description Intelligence", body: "NLP extracts operational fields directly from the citizen&apos;s detailed description; no technical form-filling is required.", accent: "#FFE600" },
               { icon: Users,        title: "Nearest-Officer Dispatch",  body: "Haversine GPS matching finds the closest available officers in real time and assigns them with one click.",                         accent: "#10B981" },
@@ -399,7 +401,7 @@ export default function HomePage() {
             ].map((cap) => {
               const Icon = cap.icon;
               return (
-                <div className="browser-card cmd-card-glow" key={cap.title}>
+                <div className="browser-card cmd-card-glow hover-lift" key={cap.title}>
                   <div className="browser-card-header border-b-2 border-[#252535]">
                     <span className="browser-dot" style={{ background: "#FF5F57" }} />
                     <span className="browser-dot" style={{ background: "#FEBC2E" }} />
@@ -531,6 +533,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      <ScrollAnimationsProvider />
+      <DrishtiChatbot />
 
       {/* ── JSON-LD structured data ──────────────────────────────────────────── */}
       <script
