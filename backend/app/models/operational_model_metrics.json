@@ -1,7 +1,7 @@
 {
   "source_rows": 2762,
-  "resource_mae": 0.18142503074097585,
-  "learning_priority_accuracy": 0.9981916817359855,
+  "resource_mae": 0.12505356907406595,
+  "learning_priority_accuracy": 0.9963833634719711,
   "target_columns": [
     "personnel_total",
     "constables",
