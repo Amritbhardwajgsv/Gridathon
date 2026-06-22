@@ -64,12 +64,13 @@ export default function HotspotsPage() {
   useEffect(() => {
     if (!sdkReady || !mapRef.current || !data) return;
     const init = () => {
-      if (!window.mappls) { setTimeout(init, 300); return; }
+      const sdk = window.mappls;
+      if (!sdk) { setTimeout(init, 300); return; }
       if (mapInstance.current) {
         mapInstance.current.remove?.();
         mapInstance.current = null;
       }
-      const map = new window.mappls.Map(mapRef.current, {
+      const map = new sdk.Map(mapRef.current, {
         center: [12.9716, 77.5946],
         zoom: 11,
         search: false,
@@ -89,7 +90,7 @@ export default function HotspotsPage() {
           el.title = h.junction;
           el.addEventListener("click", () => setSelected(h));
 
-          new window.mappls.Marker({
+          new sdk.Marker({
             map,
             position: [h.lat, h.lng],
             icon: {
