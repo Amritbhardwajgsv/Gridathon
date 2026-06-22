@@ -15,11 +15,21 @@ import {
   Wifi,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 import { highSignalLocations } from "@/lib/bengaluru";
 import { submitCitizenGrievance } from "@/lib/api";
 import type { CitizenGrievance, CitizenGrievancePayload } from "@/types/prediction";
+
+type IncidentSummary = {
+  complaint_type: string;
+  severity: string;
+  location: string;
+  zone: string | null;
+  corridor: string | null;
+  status: string;
+  created_at: string;
+};
 
 type FormState = {
   location_text: string;
@@ -45,6 +55,15 @@ export default function CitizenGrievancePage() {
   const [locMsg,      setLocMsg]      = useState("");
   const [submitting,  setSubmitting]  = useState(false);
   const [isLocating,  setIsLocating]  = useState(false);
+  const [incidents,   setIncidents]   = useState<IncidentSummary[]>([]);
+
+  useEffect(() => {
+    const base = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/+$/, "");
+    fetch(`${base}/citizen/incidents/recent`)
+      .then((r) => r.ok ? r.json() : [])
+      .then(setIncidents)
+      .catch(() => {});
+  }, []);
 
   const completion = useMemo(() => {
     const fields: Array<keyof FormState> = ["location_text", "description"];
@@ -383,6 +402,59 @@ export default function CitizenGrievancePage() {
                       Track this complaint
                     </Link>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Recent incidents */}
+            {incidents.length > 0 && (
+              <div className="browser-card">
+                <div className="browser-card-header border-b-2 border-[#252535]">
+                  <span className="browser-dot browser-dot-red" />
+                  <span className="browser-dot browser-dot-yellow" />
+                  <span className="browser-dot browser-dot-green" />
+                  <div className="ml-3 flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#444455]">
+                    <Siren className="h-3 w-3" /> Recent Incidents
+                  </div>
+                </div>
+                <div className="divide-y divide-[#1A1A2E]">
+                  {incidents.map((inc, i) => {
+                    const sevColor =
+                      inc.severity === "Critical" ? "text-[#EF4444]" :
+                      inc.severity === "High"     ? "text-[#F59E0B]" :
+                      inc.severity === "Medium"   ? "text-[#3B82F6]" :
+                                                    "text-[#10B981]";
+                    const ago = (() => {
+                      const diff = Date.now() - new Date(inc.created_at).getTime();
+                      const m = Math.floor(diff / 60000);
+                      if (m < 60) return `${m}m ago`;
+                      const h = Math.floor(m / 60);
+                      if (h < 24) return `${h}h ago`;
+                      return `${Math.floor(h / 24)}d ago`;
+                    })();
+                    return (
+                      <div key={i} className="flex items-start justify-between gap-3 px-4 py-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] font-black uppercase ${sevColor}`}>{inc.severity}</span>
+                            <span className="text-[10px] text-[#444455]">·</span>
+                            <span className="text-[10px] text-[#8888A0] capitalize">{inc.complaint_type.replace(/_/g, " ")}</span>
+                          </div>
+                          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-[#F0F0F8]">
+                            <MapPin className="h-2.5 w-2.5 shrink-0 text-[#444455]" />
+                            <span className="truncate">{inc.location}</span>
+                          </div>
+                          {inc.corridor && (
+                            <div className="mt-0.5 text-[10px] text-[#444455]">{inc.corridor}</div>
+                          )}
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <div className="text-[10px] text-[#444455]">{ago}</div>
+                          <div className="mt-0.5 text-[9px] font-bold uppercase text-[#444455]">{inc.status}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
