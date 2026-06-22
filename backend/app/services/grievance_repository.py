@@ -11,6 +11,31 @@ from app.services.event_queue import event_queue
 from app.services.cache import cache, GRIEVANCES_LIST
 
 
+import logging as _logging
+
+_log = _logging.getLogger("drishti.grievance")
+
+_EVALUATION_MSG = json.dumps({
+    "text": (
+        "Your complaint has been registered. Our AI system is currently evaluating it. "
+        "If your report describes a genuine traffic incident, it will be actioned immediately. "
+        "If found to be inaccurate or spam, it will be permanently removed from the system."
+    ),
+    "duration_min": None,
+    "duration_hrs": None,
+    "personnel": None,
+    "urgency": None,
+    "detected_cause": None,
+    "detected_veh_type": None,
+}, ensure_ascii=False)
+
+_RETURNING = """
+    id, tracking_id, complaint_type, severity, location_text,
+    zone, corridor, latitude, longitude, description, status,
+    agent_priority_score, agent_recommendation, created_at
+"""
+
+
 class GrievanceRejectedError(Exception):
     """Raised when the LLM firewall rejects the complaint description."""
 
@@ -23,7 +48,9 @@ class GrievanceRepository:
     def is_enabled(self) -> bool:
         return bool(self.database_url)
 
-    def create(self, payload: CitizenGrievanceCreateRequest) -> CitizenGrievanceResponse:
+    def create_instant(self, payload: CitizenGrievanceCreateRequest) -> CitizenGrievanceResponse:
+        """Insert a placeholder record immediately and return the tracking ID.
+        Full ML triage and firewall validation run via process_async() in the background."""
         if not self.database_url:
             raise RuntimeError("Database is not configured")
 
@@ -32,27 +59,155 @@ class GrievanceRepository:
         tracking_id = f"DRS-BTP-{uuid4().hex[:10].upper()}"
         payload_data = self._to_dict(payload)
 
-        # ── Keyword pre-filter (sync, instant) ───────────────────────────────
-        # Rejects obviously non-traffic text before any DB insert.
-        # Gemini validation runs async after the response is sent (see main.py).
-        if payload.description and len(payload.description.strip()) >= 10:
-            import app.services.incident_predictor as _predictor
-            if not _predictor._keyword_prefilter(payload.description):
-                raise GrievanceRejectedError("Input does not describe a road traffic incident.")
+        with psycopg.connect(self.database_url, row_factory=dict_row) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    insert into citizen_grievances (
+                        tracking_id, reporter_name, reporter_phone, reporter_email,
+                        complaint_type, severity, location_text, zone, corridor,
+                        latitude, longitude, description, status,
+                        agent_priority_score, agent_recommendation, nlp_extracted_at
+                    ) values (
+                        %(tracking_id)s, %(reporter_name)s, %(reporter_phone)s, %(reporter_email)s,
+                        %(complaint_type)s, 'Low', %(location_text)s, %(zone)s, %(corridor)s,
+                        %(latitude)s, %(longitude)s, %(description)s, 'evaluating',
+                        0, %(agent_recommendation)s, now()
+                    ) returning {_RETURNING}
+                    """,
+                    {**payload_data, "tracking_id": tracking_id, "agent_recommendation": _EVALUATION_MSG},
+                )
+                row = cur.fetchone()
+
+        cache.delete(GRIEVANCES_LIST)
+        return CitizenGrievanceResponse(**row)
+
+    def process_async(self, tracking_id: str, payload: CitizenGrievanceCreateRequest) -> None:
+        """Background task: run geocoding + ML triage + Gemini firewall.
+        Deletes the record if rejected; updates it with full results if valid."""
+        import psycopg
+        import app.services.incident_predictor as _predictor
+
+        try:
+            # Step 1: keyword pre-filter — instant, no network
+            if not _predictor._keyword_prefilter(payload.description or ""):
+                self._delete_grievance(tracking_id, "not a traffic incident (keyword pre-filter)")
+                return
+
+            # Step 2: geocoding
+            payload_data = self._to_dict(payload)
+            geocode_result = None
+            if payload.latitude is None or payload.longitude is None:
+                geocode_query = " ".join(
+                    p for p in [payload.location_text, payload.corridor, payload.zone, "Bengaluru", "Karnataka"]
+                    if p
+                )
+                geocode_result = mapmyindia_client.geocode(geocode_query)
+                if geocode_result:
+                    payload_data["latitude"] = geocode_result.latitude
+                    payload_data["longitude"] = geocode_result.longitude
+
+            # Step 3: ML triage
+            priority_score, recommendation, computed_severity = triage_grievance(
+                CitizenGrievanceCreateRequest(**payload_data)
+            )
+            payload_data["severity"] = computed_severity
+            nlp_features = self._training_features(payload_data, recommendation)
+
+            # Step 4: Gemini firewall
+            is_valid, fw_reason = _predictor.llm_firewall(payload.description or "")
+            if not is_valid:
+                self._delete_grievance(tracking_id, fw_reason)
+                return
+
+            # Step 5: update record with full ML results
+            with psycopg.connect(self.database_url, row_factory=dict_row) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        update citizen_grievances set
+                            severity                = %(severity)s,
+                            status                  = 'submitted',
+                            latitude                = %(latitude)s,
+                            longitude               = %(longitude)s,
+                            geocoding_provider      = %(geocoding_provider)s,
+                            geocoding_confidence    = %(geocoding_confidence)s,
+                            geocoding_raw           = %(geocoding_raw)s::jsonb,
+                            agent_priority_score    = %(agent_priority_score)s,
+                            agent_recommendation    = %(agent_recommendation)s,
+                            nlp_event_cause         = %(nlp_event_cause)s,
+                            nlp_vehicle_type        = %(nlp_vehicle_type)s,
+                            nlp_event_type          = %(nlp_event_type)s,
+                            nlp_priority            = %(nlp_priority)s,
+                            nlp_requires_road_closure = %(nlp_requires_road_closure)s,
+                            nlp_extracted_at        = now()
+                        where upper(tracking_id) = upper(%(tracking_id)s)
+                        returning id, zone, corridor, agent_priority_score
+                        """,
+                        {
+                            "tracking_id"          : tracking_id,
+                            "severity"             : computed_severity,
+                            "latitude"             : payload_data.get("latitude"),
+                            "longitude"            : payload_data.get("longitude"),
+                            "geocoding_provider"   : "mapmyindia" if geocode_result else None,
+                            "geocoding_confidence" : geocode_result.confidence if geocode_result else None,
+                            "geocoding_raw"        : json.dumps(geocode_result.raw) if geocode_result else None,
+                            "agent_priority_score" : priority_score,
+                            "agent_recommendation" : recommendation,
+                            **nlp_features,
+                        },
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        event_queue.publish(
+                            "grievance.triaged",
+                            tracking_id,
+                            {
+                                "grievance_id"        : str(row["id"]),
+                                "tracking_id"         : tracking_id,
+                                "severity"            : computed_severity,
+                                "agent_priority_score": priority_score,
+                                "zone"                : row["zone"],
+                                "corridor"            : row["corridor"],
+                            },
+                            cursor=cur,
+                        )
+
+            cache.delete(GRIEVANCES_LIST)
+            _log.info("Processed %s — severity=%s score=%d", tracking_id, computed_severity, priority_score)
+
+        except Exception as exc:
+            _log.exception("Background processing failed for %s: %s", tracking_id, exc)
+
+    def _delete_grievance(self, tracking_id: str, reason: str) -> None:
+        import psycopg
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "delete from citizen_grievances where upper(tracking_id) = upper(%s)",
+                        (tracking_id,),
+                    )
+            cache.delete(GRIEVANCES_LIST)
+            _log.info("Deleted grievance %s — reason: %s", tracking_id, reason)
+        except Exception as exc:
+            _log.warning("Could not delete %s: %s", tracking_id, exc)
+
+    def create(self, payload: CitizenGrievanceCreateRequest) -> CitizenGrievanceResponse:
+        """Synchronous create used by officer filing endpoint — runs triage inline."""
+        if not self.database_url:
+            raise RuntimeError("Database is not configured")
+
+        import psycopg
+
+        tracking_id = f"DRS-BTP-{uuid4().hex[:10].upper()}"
+        payload_data = self._to_dict(payload)
 
         geocode_result = None
-
         if payload.latitude is None or payload.longitude is None:
             geocode_query = " ".join(
-                part
-                for part in [
-                    payload.location_text,
-                    payload.corridor,
-                    payload.zone,
-                    "Bengaluru",
-                    "Karnataka",
-                ]
-                if part
+                p for p in [payload.location_text, payload.corridor, payload.zone, "Bengaluru", "Karnataka"]
+                if p
             )
             geocode_result = mapmyindia_client.geocode(geocode_query)
             if geocode_result:
@@ -62,92 +217,39 @@ class GrievanceRepository:
         priority_score, recommendation, computed_severity = triage_grievance(
             CitizenGrievanceCreateRequest(**payload_data)
         )
-        # Always use the model-computed severity (overrides any user-supplied value)
         payload_data["severity"] = computed_severity
         nlp_features = self._training_features(payload_data, recommendation)
 
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """
+                    f"""
                     insert into citizen_grievances (
-                        tracking_id,
-                        reporter_name,
-                        reporter_phone,
-                        reporter_email,
-                        complaint_type,
-                        severity,
-                        location_text,
-                        zone,
-                        corridor,
-                        latitude,
-                        longitude,
-                        description,
-                        geocoding_provider,
-                        geocoding_confidence,
-                        geocoding_raw,
-                        agent_priority_score,
-                        agent_recommendation,
-                        nlp_event_cause,
-                        nlp_vehicle_type,
-                        nlp_event_type,
-                        nlp_priority,
-                        nlp_requires_road_closure,
-                        nlp_extracted_at
-                    )
-                    values (
-                        %(tracking_id)s,
-                        %(reporter_name)s,
-                        %(reporter_phone)s,
-                        %(reporter_email)s,
-                        %(complaint_type)s,
-                        %(severity)s,
-                        %(location_text)s,
-                        %(zone)s,
-                        %(corridor)s,
-                        %(latitude)s,
-                        %(longitude)s,
-                        %(description)s,
-                        %(geocoding_provider)s,
-                        %(geocoding_confidence)s,
-                        %(geocoding_raw)s::jsonb,
-                        %(agent_priority_score)s,
-                        %(agent_recommendation)s,
-                        %(nlp_event_cause)s,
-                        %(nlp_vehicle_type)s,
-                        %(nlp_event_type)s,
-                        %(nlp_priority)s,
-                        %(nlp_requires_road_closure)s,
-                        now()
-                    )
-                    returning
-                        id,
-                        tracking_id,
-                        complaint_type,
-                        severity,
-                        location_text,
-                        zone,
-                        corridor,
-                        latitude,
-                        longitude,
-                        description,
-                        status,
-                        agent_priority_score,
-                        agent_recommendation,
-                        created_at
+                        tracking_id, reporter_name, reporter_phone, reporter_email,
+                        complaint_type, severity, location_text, zone, corridor,
+                        latitude, longitude, description,
+                        geocoding_provider, geocoding_confidence, geocoding_raw,
+                        agent_priority_score, agent_recommendation,
+                        nlp_event_cause, nlp_vehicle_type, nlp_event_type,
+                        nlp_priority, nlp_requires_road_closure, nlp_extracted_at
+                    ) values (
+                        %(tracking_id)s, %(reporter_name)s, %(reporter_phone)s, %(reporter_email)s,
+                        %(complaint_type)s, %(severity)s, %(location_text)s, %(zone)s, %(corridor)s,
+                        %(latitude)s, %(longitude)s, %(description)s,
+                        %(geocoding_provider)s, %(geocoding_confidence)s, %(geocoding_raw)s::jsonb,
+                        %(agent_priority_score)s, %(agent_recommendation)s,
+                        %(nlp_event_cause)s, %(nlp_vehicle_type)s, %(nlp_event_type)s,
+                        %(nlp_priority)s, %(nlp_requires_road_closure)s, now()
+                    ) returning {_RETURNING}
                     """,
                     {
                         **payload_data,
-                        "tracking_id": tracking_id,
-                        "geocoding_provider": "mapmyindia" if geocode_result else None,
-                        "geocoding_confidence": geocode_result.confidence
-                        if geocode_result
-                        else None,
-                        "geocoding_raw": json.dumps(geocode_result.raw)
-                        if geocode_result
-                        else None,
-                        "agent_priority_score": priority_score,
-                        "agent_recommendation": recommendation,
+                        "tracking_id"          : tracking_id,
+                        "geocoding_provider"   : "mapmyindia" if geocode_result else None,
+                        "geocoding_confidence" : geocode_result.confidence if geocode_result else None,
+                        "geocoding_raw"        : json.dumps(geocode_result.raw) if geocode_result else None,
+                        "agent_priority_score" : priority_score,
+                        "agent_recommendation" : recommendation,
                         **nlp_features,
                     },
                 )
@@ -156,42 +258,28 @@ class GrievanceRepository:
                     "grievance.created",
                     tracking_id,
                     {
-                        "grievance_id"       : str(row["id"]),
-                        "tracking_id"        : row["tracking_id"],
-                        "complaint_type"     : row["complaint_type"],
-                        "severity"           : row["severity"],
-                        "zone"               : row["zone"],
-                        "corridor"           : row["corridor"],
-                        "status"             : row["status"],
+                        "grievance_id"        : str(row["id"]),
+                        "tracking_id"         : row["tracking_id"],
+                        "complaint_type"      : row["complaint_type"],
+                        "severity"            : row["severity"],
+                        "zone"                : row["zone"],
+                        "corridor"            : row["corridor"],
+                        "status"              : row["status"],
                         "agent_priority_score": row["agent_priority_score"],
-                        "created_at"         : str(row["created_at"]),
+                        "created_at"          : str(row["created_at"]),
                     },
                     cursor=cursor,
                 )
                 cursor.execute(
                     """
                     insert into agent_actions (
-                        aggregate_type,
-                        aggregate_id,
-                        agent_name,
-                        action_type,
-                        recommendation,
-                        confidence
-                    )
-                    values (
-                        'citizen_grievances',
-                        %(id)s,
-                        'grievance_triage_agent',
-                        'triage_recommendation',
-                        %(recommendation)s,
-                        %(confidence)s
+                        aggregate_type, aggregate_id, agent_name, action_type, recommendation, confidence
+                    ) values (
+                        'citizen_grievances', %(id)s, 'grievance_triage_agent',
+                        'triage_recommendation', %(recommendation)s, %(confidence)s
                     )
                     """,
-                    {
-                        "id": row["id"],
-                        "recommendation": recommendation,
-                        "confidence": priority_score / 100,
-                    },
+                    {"id": row["id"], "recommendation": recommendation, "confidence": priority_score / 100},
                 )
 
         cache.delete(GRIEVANCES_LIST)
@@ -326,30 +414,6 @@ class GrievanceRepository:
 
         return CitizenGrievanceResponse(**row) if row else None
 
-    def validate_async(self, tracking_id: str, description: str) -> None:
-        """Background task: run Gemini firewall and stamp the record if rejected.
-        Called after the HTTP response has already been sent, so latency doesn't matter."""
-        import logging
-        import app.services.incident_predictor as _predictor
-        log = logging.getLogger("drishti.firewall")
-        try:
-            is_valid, reason = _predictor.llm_firewall(description)
-            if is_valid:
-                return
-            # Gemini explicitly rejected — stamp recommendation so operators can see it
-            import psycopg
-            with psycopg.connect(self.database_url, row_factory=dict_row) as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """update citizen_grievances
-                           set agent_recommendation = %s
-                           where upper(tracking_id) = upper(%s)""",
-                        (f"[FIREWALL REJECTED] {reason}", tracking_id),
-                    )
-            cache.delete(GRIEVANCES_LIST)
-            log.info("Firewall async flagged %s: %s", tracking_id, reason)
-        except Exception as exc:
-            log.warning("Async firewall check failed for %s: %s", tracking_id, exc)
 
     @staticmethod
     def _to_dict(payload: CitizenGrievanceCreateRequest) -> dict:
