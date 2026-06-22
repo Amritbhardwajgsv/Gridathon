@@ -31,8 +31,8 @@ _BLR_LNG    = 77.5946
 
 try:
     import joblib
-    _clf = joblib.load(_MODELS_DIR / "impact_model.pkl")
-    _reg = joblib.load(_MODELS_DIR / "traffic_duration_random_forest_model.pkl")
+    _clf = joblib.load(_MODELS_DIR / "rf_impact_model.pkl")
+    _reg = joblib.load(_MODELS_DIR / "rf_duration_model.pkl")
     _RF_LOADED = True
 except Exception:
     _clf = _reg = None
