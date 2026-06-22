@@ -11,6 +11,9 @@ from pydantic import BaseModel
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from app.schemas import (
     AuthUserResponse,
@@ -23,6 +26,7 @@ from app.schemas import (
     DeploymentStatusUpdateRequest,
     FieldAssignmentListResponse,
     GrievanceStatusUpdateRequest,
+    GrievanceResolutionRequest,
     HealthResponse,
     ImpactPredictionRequest,
     ImpactPredictionResponse,
@@ -60,6 +64,8 @@ logger = logging.getLogger("drishti")
 prediction_service = PredictionService()
 prediction_repository = PredictionRepository()
 grievance_repository = GrievanceRepository()
+
+limiter = Limiter(key_func=get_remote_address, default_limits=[])
 
 
 # ---------------------------------------------------------------------------
@@ -205,13 +211,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from app.core.config import get_database_url
+    from app.core.database import init_pool, close_pool
     db_url = get_database_url()
+    if db_url:
+        init_pool(db_url)
     event_queue.init(db_url)
     event_queue.start()
     event_queue.replay_pending()
-    logger.info("DRISHTI backend starting — event queue ready (models load on first use)")
+    logger.info("DRISHTI backend starting — event queue + connection pool ready")
     yield
     event_queue.stop()
+    close_pool()
     logger.info("DRISHTI backend shutdown")
 
 
@@ -221,6 +231,8 @@ app = FastAPI(
     description="Production API for Bengaluru Police traffic operations and event impact prediction.",
     lifespan=lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "")
 _allowed_origins = [o.strip().rstrip("/") for o in _raw_origins.split(",") if o.strip()]
@@ -511,6 +523,50 @@ def update_grievance_status(
     return result
 
 
+@app.patch("/police/grievances/{grievance_id}/resolve", tags=["police"])
+def resolve_grievance_with_feedback(
+    grievance_id: str,
+    body: GrievanceResolutionRequest,
+    user: AuthUserResponse = Depends(require_roles("admin", "operator")),
+) -> dict:
+    """Mark grievance resolved and capture actual outcome for ML retraining."""
+    if not grievance_repository.is_enabled:
+        raise HTTPException(status_code=503, detail="DB not configured")
+    from app.core.database import get_pool
+    from psycopg.rows import dict_row
+    try:
+        with get_pool().connection() as conn:
+            conn.row_factory = dict_row
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    update citizen_grievances set
+                        status                    = 'resolved',
+                        resolved_at               = now(),
+                        actual_duration_min       = %(dur)s,
+                        actual_personnel_deployed = %(pers)s,
+                        confirmed_cause           = %(cause)s,
+                        resolution_notes          = %(notes)s
+                    where id = %(id)s
+                    returning tracking_id, location_text, reporter_email, status
+                    """,
+                    {"id": grievance_id, "dur": body.actual_duration_min,
+                     "pers": body.actual_personnel_deployed,
+                     "cause": body.confirmed_cause, "notes": body.resolution_notes},
+                )
+                row = cur.fetchone()
+    except RuntimeError:
+        raise HTTPException(status_code=503, detail="DB pool not ready")
+    if not row:
+        raise HTTPException(status_code=404, detail="Grievance not found")
+    from app.services.email_service import send_status_update
+    if row.get("reporter_email"):
+        send_status_update(row["reporter_email"], row["tracking_id"], "resolved", row["location_text"] or "")
+    from app.services.cache import cache, GRIEVANCES_LIST
+    cache.delete(GRIEVANCES_LIST)
+    return {"tracking_id": row["tracking_id"], "status": "resolved"}
+
+
 # ---------------------------------------------------------------------------
 # Field
 # ---------------------------------------------------------------------------
@@ -665,18 +721,28 @@ def officer_file_grievance(
     status_code=status.HTTP_201_CREATED,
     tags=["citizen"],
 )
+@limiter.limit("5/minute")
 def create_citizen_grievance(
     request: CitizenGrievanceCreateRequest,
     background_tasks: BackgroundTasks,
+    http_request: Request,
 ) -> CitizenGrievanceResponse:
     try:
         result = grievance_repository.create_instant(request)
-        background_tasks.add_task(
-            grievance_repository.process_async,
-            result.tracking_id,
-            request,
-        )
+        payload_dict = request.model_dump()
+        try:
+            from app.tasks import process_grievance
+            process_grievance.delay(result.tracking_id, payload_dict)
+        except Exception:
+            # Redis unavailable — fall back to FastAPI BackgroundTasks
+            background_tasks.add_task(
+                grievance_repository.process_async,
+                result.tracking_id,
+                request,
+            )
         return result
+    except GrievanceRejectedError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Grievance creation failed: %s", exc)
         raise HTTPException(
@@ -718,11 +784,53 @@ def recent_public_incidents() -> list[dict]:
     ]
 
 
+@app.get("/citizen/incidents/map", tags=["citizen"])
+def public_incidents_map() -> list[dict]:
+    """Return up to 50 active incidents with coordinates for the public map."""
+    if not grievance_repository.is_enabled:
+        return []
+    from psycopg.rows import dict_row
+    try:
+        with get_pool().connection() as conn:
+            conn.row_factory = dict_row
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select complaint_type, severity, location_text, zone, corridor,
+                           status, latitude, longitude, created_at
+                    from citizen_grievances
+                    where status not in ('evaluating', 'rejected', 'resolved', 'closed')
+                      and latitude  is not null
+                      and longitude is not null
+                    order by created_at desc
+                    limit 50
+                    """
+                )
+                rows = cur.fetchall()
+    except RuntimeError:
+        return []
+    return [
+        {
+            "complaint_type": r["complaint_type"],
+            "severity":       r["severity"],
+            "location":       r["location_text"],
+            "zone":           r["zone"],
+            "corridor":       r["corridor"],
+            "status":         r["status"],
+            "lat":            float(r["latitude"]),
+            "lng":            float(r["longitude"]),
+            "created_at":     r["created_at"].isoformat(),
+        }
+        for r in rows
+    ]
+
+
 class _ChatRequest(BaseModel):
     message: str
 
 @app.post("/citizen/chat", tags=["citizen"])
-async def citizen_chat(body: _ChatRequest) -> dict:
+@limiter.limit("30/minute")
+async def citizen_chat(request: Request, body: _ChatRequest) -> dict:
     """Gemini-powered assistant that answers questions about how DRISHTI works."""
     msg = body.message.strip()[:600]
     if not msg:

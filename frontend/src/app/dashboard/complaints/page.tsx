@@ -23,7 +23,7 @@ const PredictionResultCard = dynamic(() => import("@/components/PredictionResult
   loading: () => <div className="flex h-32 items-center justify-center text-[12px] text-[#3d5278]"><Loader2 className="h-4 w-4 animate-spin text-[#22d3ee] mr-2" />Loading result…</div>,
 });
 import ProtectedRoute from "@/components/ProtectedRoute";
-import { listCitizenGrievances, updateGrievanceStatus } from "@/lib/api";
+import { listCitizenGrievances, updateGrievanceStatus, resolveGrievanceWithFeedback } from "@/lib/api";
 import { modelCorridors, modelZones } from "@/lib/bengaluru";
 import { formatDateTime, humanize } from "@/lib/format";
 import type {
@@ -60,6 +60,11 @@ export default function ComplaintsPage() {
   const [forecastResult,   setForecastResult]   = useState<PredictImpactResponse | null>(null);
   const [forecastPayload,  setForecastPayload]  = useState<PredictImpactPayload | null>(null);
   const [showForecast,     setShowForecast]     = useState(false);
+
+  // Resolution modal
+  const [showResolveModal,   setShowResolveModal]   = useState(false);
+  const [resolveForm,        setResolveForm]        = useState({ duration: "", personnel: "", cause: "", notes: "" });
+  const [isResolving,        setIsResolving]        = useState(false);
 
   async function loadItems() {
     setIsLoading(true);
@@ -311,7 +316,7 @@ export default function ComplaintsPage() {
                     <button
                       className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#1c2e4a] px-3 py-2 text-[12px] font-semibold text-[#7c9ab8] transition hover:bg-[#0d1629] disabled:opacity-50"
                       disabled={isUpdatingStatus || selectedItem.status === "resolved"}
-                      onClick={() => setStatus("resolved")}
+                      onClick={() => { setResolveForm({ duration: "", personnel: "", cause: "", notes: "" }); setShowResolveModal(true); }}
                       type="button"
                     >
                       Mark resolved
@@ -363,6 +368,78 @@ export default function ComplaintsPage() {
           </aside>
         </section>
       </div>
+
+      {/* Resolution feedback modal */}
+      {showResolveModal && selectedItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[#1c2e4a] bg-[#060d1f] p-6 shadow-2xl">
+            <h3 className="mb-1 text-[13px] font-bold text-[#e2e8f0]">Resolve Complaint</h3>
+            <p className="mb-4 text-[11px] text-[#3d5278]">{selectedItem.tracking_id} · {selectedItem.location_text}</p>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[#3d5278]">Duration (min)</label>
+                  <input type="number" min="0" placeholder="e.g. 45"
+                    className="w-full rounded-lg border border-[#1c2e4a] bg-[#0a1628] px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#22d3ee]"
+                    value={resolveForm.duration} onChange={(e) => setResolveForm((p) => ({ ...p, duration: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[#3d5278]">Officers deployed</label>
+                  <input type="number" min="0" placeholder="e.g. 3"
+                    className="w-full rounded-lg border border-[#1c2e4a] bg-[#0a1628] px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#22d3ee]"
+                    value={resolveForm.personnel} onChange={(e) => setResolveForm((p) => ({ ...p, personnel: e.target.value }))} />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[#3d5278]">Confirmed cause</label>
+                <input type="text" placeholder="e.g. Vehicle breakdown"
+                  className="w-full rounded-lg border border-[#1c2e4a] bg-[#0a1628] px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#22d3ee]"
+                  value={resolveForm.cause} onChange={(e) => setResolveForm((p) => ({ ...p, cause: e.target.value }))} />
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[#3d5278]">Resolution notes</label>
+                <textarea rows={3} placeholder="What action was taken?"
+                  className="w-full rounded-lg border border-[#1c2e4a] bg-[#0a1628] px-3 py-2 text-[12px] text-[#e2e8f0] outline-none focus:border-[#22d3ee] resize-none"
+                  value={resolveForm.notes} onChange={(e) => setResolveForm((p) => ({ ...p, notes: e.target.value }))} />
+              </div>
+            </div>
+
+            <div className="mt-5 flex gap-2 justify-end">
+              <button type="button"
+                className="rounded-xl border border-[#1c2e4a] px-4 py-2 text-[11px] font-semibold text-[#7c9ab8] hover:bg-[#0d1629]"
+                onClick={() => setShowResolveModal(false)}>
+                Cancel
+              </button>
+              <button type="button" disabled={isResolving}
+                className="rounded-xl bg-[#22d3ee] px-4 py-2 text-[11px] font-bold text-[#060d1f] hover:bg-[#06b6d4] disabled:opacity-50"
+                onClick={async () => {
+                  if (!selectedItem) return;
+                  setIsResolving(true);
+                  try {
+                    await resolveGrievanceWithFeedback(selectedItem.id, {
+                      actual_duration_min:       resolveForm.duration ? parseInt(resolveForm.duration) : null,
+                      actual_personnel_deployed: resolveForm.personnel ? parseInt(resolveForm.personnel) : null,
+                      confirmed_cause:           resolveForm.cause || null,
+                      resolution_notes:          resolveForm.notes || null,
+                    });
+                    setItems((prev) => prev.map((it) => it.id === selectedItem.id ? { ...it, status: "resolved" } : it));
+                    setShowResolveModal(false);
+                    setStatusMessage({ text: "Complaint resolved and feedback saved.", ok: true });
+                  } catch {
+                    setStatusMessage({ text: "Could not resolve complaint. Try again.", ok: false });
+                    setShowResolveModal(false);
+                  } finally {
+                    setIsResolving(false);
+                  }
+                }}>
+                {isResolving ? "Saving…" : "Confirm resolved"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </ProtectedRoute>
   );
 }

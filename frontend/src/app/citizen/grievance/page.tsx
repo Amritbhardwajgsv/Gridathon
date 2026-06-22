@@ -22,11 +22,12 @@ import { submitCitizenGrievance } from "@/lib/api";
 import type { CitizenGrievance, CitizenGrievancePayload } from "@/types/prediction";
 
 type FormState = {
-  location_text: string;
-  latitude:      string;
-  longitude:     string;
-  description:   string;
+  location_text:  string;
+  latitude:       string;
+  longitude:      string;
+  description:    string;
   reporter_phone: string;
+  reporter_email: string;
 };
 
 const initial: FormState = {
@@ -35,6 +36,7 @@ const initial: FormState = {
   longitude:      "",
   description:    "",
   reporter_phone: "",
+  reporter_email: "",
 };
 
 export default function CitizenGrievancePage() {
@@ -110,6 +112,7 @@ export default function CitizenGrievancePage() {
       latitude:       form.latitude  ? Number(form.latitude)  : undefined,
       longitude:      form.longitude ? Number(form.longitude) : undefined,
       reporter_phone: form.reporter_phone || undefined,
+      reporter_email: form.reporter_email || undefined,
     };
 
     try {
@@ -119,9 +122,13 @@ export default function CitizenGrievancePage() {
       setErrors({});
       setLocMsg("");
     } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
       const detail = (err as { response?: { data?: { detail?: { reason?: string; code?: string } | string } } })
         ?.response?.data?.detail;
-      if (detail && typeof detail === "object" && detail.code === "FIREWALL_REJECTED") {
+      if (status === 409) {
+        const msg = typeof detail === "string" ? detail : "An incident at this location is already being tracked.";
+        setErrMsg(msg);
+      } else if (detail && typeof detail === "object" && detail.code === "FIREWALL_REJECTED") {
         setErrors((c) => ({ ...c, description: `AI check: ${detail.reason}` }));
         setErrMsg("Your description doesn't match a traffic incident. Please describe the actual road situation.");
       } else {
@@ -277,6 +284,17 @@ export default function CitizenGrievancePage() {
                     placeholder={"e.g. Heavy truck stalled near Hebbal flyover blocking two lanes.\n\nKannada: ಮರ ಬಿದ್ದಿದೆ ರಸ್ತೆ ಬ್ಲಾಕ್ ಆಗಿದೆ"}
                     value={form.description}
                     onChange={(e) => set("description", e.target.value)}
+                  />
+                </F>
+
+                <F label="Email (optional)" hint="Get notified when your complaint status changes.">
+                  <input
+                    className={inp}
+                    type="email"
+                    disabled={submitting}
+                    placeholder="your@email.com"
+                    value={form.reporter_email}
+                    onChange={(e) => set("reporter_email", e.target.value)}
                   />
                 </F>
 
