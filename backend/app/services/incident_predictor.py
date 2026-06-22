@@ -42,20 +42,57 @@ def _load_corridor_risk() -> dict[str, float]:
     with open(path, newline="") as f:
         for row in _csv_mod.DictReader(f):
             name = row.get("corridor", "").strip().lower()
-            pct  = row.get("high_priority_pct", row.get("high_pct", "0.5"))
             try:
-                result[name] = float(pct)
-            except ValueError:
+                # CSV stores percentage (0-100); model trained on fraction (0-1)
+                result[name] = float(row["high_priority_pct"]) / 100.0
+            except (KeyError, ValueError):
                 pass
     return result
 
-_CORRIDOR_RISK: dict[str, float] = {}
 
-def _get_corridor_risk(corridor: str) -> float:
-    global _CORRIDOR_RISK
+def _load_junction_hotspots() -> list[dict]:
+    path = Path(__file__).resolve().parents[1] / "ml" / "junction_hotspots.csv"
+    if not path.exists():
+        return []
+    rows = []
+    with open(path, newline="") as f:
+        for r in _csv_mod.DictReader(f):
+            try:
+                rows.append({
+                    "lat": float(r["lat"]), "lng": float(r["lng"]),
+                    "high_pct": float(r["high_pct"]),
+                })
+            except (KeyError, ValueError):
+                pass
+    return rows
+
+
+_CORRIDOR_RISK: dict[str, float] = {}
+_JUNCTION_HOTSPOTS: list[dict] = []
+
+
+def _get_corridor_risk(corridor: str, lat: float | None = None, lng: float | None = None) -> float:
+    """Return corridor risk (0-1). If corridor unknown, derive from nearest junction hotspot."""
+    global _CORRIDOR_RISK, _JUNCTION_HOTSPOTS
     if not _CORRIDOR_RISK:
         _CORRIDOR_RISK = _load_corridor_risk()
-    return _CORRIDOR_RISK.get(corridor.strip().lower(), 0.5)
+
+    risk = _CORRIDOR_RISK.get(corridor.strip().lower())
+    if risk is not None:
+        return risk
+
+    # Corridor not in CSV — use nearest hotspot's high_pct as proxy
+    if lat is not None and lng is not None:
+        if not _JUNCTION_HOTSPOTS:
+            _JUNCTION_HOTSPOTS = _load_junction_hotspots()
+        if _JUNCTION_HOTSPOTS:
+            nearest = min(
+                _JUNCTION_HOTSPOTS,
+                key=lambda j: (j["lat"] - lat) ** 2 + (j["lng"] - lng) ** 2,
+            )
+            return nearest["high_pct"]
+
+    return 0.5  # fallback: medium risk
 
 _GEMINI_TIMEOUT_S = 20
 
@@ -382,7 +419,7 @@ def run_ml_only(
         "latitude"             : latitude,
         "longitude"            : longitude,
         "requires_road_closure": int(requires_road_closure),
-        "corridor_risk"        : _get_corridor_risk(corridor),
+        "corridor_risk"        : _get_corridor_risk(corridor, latitude, longitude),
         "event_cause_enc"      : _safe_encode(_le["event_cause"],    event_cause),
         "veh_type_enc"         : _safe_encode(_le["veh_type"],       veh_type),
         "corridor_enc"         : _safe_encode(_le["corridor"],        corridor),
