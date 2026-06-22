@@ -9,6 +9,7 @@ psycopg[binary]
 PyJWT
 bcrypt
 requests
+huggingface_hub
 langchain-core
 google-genai
 redis
