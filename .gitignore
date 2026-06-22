@@ -12,3 +12,4 @@ __pycache__/
 
 next-dev.out.log
 next-dev.err.log
+backend/ml/embeddings_cache*.npy
