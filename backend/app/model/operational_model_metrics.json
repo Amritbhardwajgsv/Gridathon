@@ -1,0 +1,16 @@
+{
+  "source_rows": 2762,
+  "resource_mae": 0.18142503074097585,
+  "learning_priority_accuracy": 0.9981916817359855,
+  "target_columns": [
+    "personnel_total",
+    "constables",
+    "asi",
+    "si",
+    "inspectors",
+    "barricades",
+    "tow_units",
+    "medical_units",
+    "diversion_confidence"
+  ]
+}
