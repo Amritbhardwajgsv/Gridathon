@@ -2,9 +2,9 @@ name: Keep Services Alive
 
 on:
   schedule:
-    # Every 10 minutes — keeps Render frontend warm
-    - cron: "*/10 * * * *"
-  workflow_dispatch:
+    # Every 10 minutes — Render free tier spins down after 15 min of inactivity
+    - cron: "*/2 * * * *"
+  workflow_dispatch: # allow manual trigger
 
 jobs:
   ping:
