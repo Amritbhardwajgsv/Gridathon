@@ -155,17 +155,17 @@ export default function PersonnelMap({
     const location = point(officer.current_latitude, officer.current_longitude);
     if (!location) return;
     window.setTimeout(() => {
-      // v3.0 SDK (Mapbox GL based) uses [lng, lat] for flyTo/setCenter
-      const lngLat: [number, number] = [location.lng, location.lat];
+      const pos = { lat: location.lat, lng: location.lng };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const m = map as any;
-      if (typeof m.flyTo === "function") {
-        m.flyTo({ center: lngLat, zoom: 16 });
+      // Try each movement API — different SDK builds expose different methods
+      if (typeof m.setCenter === "function") {
+        m.setCenter(pos);
+        if (typeof m.setZoom === "function") m.setZoom(16);
+      } else if (typeof m.flyTo === "function") {
+        m.flyTo({ center: pos, zoom: 16 });
       } else if (typeof m.setView === "function") {
-        m.setView([location.lat, location.lng], 16); // setView is Leaflet-style [lat, lng]
-      } else {
-        map.setCenter?.(lngLat);
-        map.setZoom?.(16);
+        m.setView([location.lat, location.lng], 16);
       }
     }, 100);
   }
@@ -199,7 +199,7 @@ export default function PersonnelMap({
       }
       try {
         const map = new window.mappls.Map(containerId, {
-          center: [BLR.lng, BLR.lat], // v3.0 SDK uses [lng, lat] (Mapbox GL format)
+          center: { lat: BLR.lat, lng: BLR.lng }, // object form avoids [lat,lng] vs [lng,lat] ambiguity
           zoom:   12,
         });
         mapRef.current = map;
