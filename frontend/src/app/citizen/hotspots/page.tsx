@@ -35,26 +35,11 @@ function riskLabel(risk: number): string {
   return "Low";
 }
 
-interface MapplsSDK {
-  Map: new (el: HTMLElement | null, opts: Record<string, unknown>) => MapplsMap;
-  Marker: new (opts: Record<string, unknown>) => void;
-}
-
-interface MapplsMap {
-  on: (event: string, cb: () => void) => void;
-  remove?: () => void;
-}
-
-declare global {
-  interface Window {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mappls: MapplsSDK & Record<string, any>;
-  }
-}
+import type { MaplsMap } from "@/types/mappls";
 
 export default function HotspotsPage() {
   const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstance = useRef<MapplsMap | null>(null);
+  const mapInstance = useRef<MaplsMap | null>(null);
   const [data, setData] = useState<HotspotData | null>(null);
   const [sdkReady, setSdkReady] = useState(false);
   const [selected, setSelected] = useState<Hotspot | null>(null);
@@ -91,7 +76,7 @@ export default function HotspotsPage() {
       });
       mapInstance.current = map;
 
-      map.on("load", () => {
+      map.on?.("load", () => {
         data.hotspots.forEach((h) => {
           const size = Math.max(20, Math.min(48, h.predicted_risk * 52));
           const color = riskColor(h.predicted_risk);
