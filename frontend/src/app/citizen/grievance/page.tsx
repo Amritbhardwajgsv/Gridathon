@@ -367,7 +367,7 @@ export default function CitizenGrievancePage() {
                   <div className="mt-4 flex flex-col gap-2">
                     <a
                       className="btn-primary justify-center"
-                      href={`https://wa.me/?text=${encodeURIComponent(`DRISHTI complaint registered. Token: ${result.tracking_id}. Track: http://localhost:3000/citizen/track?token=${result.tracking_id}`)}`}
+                      href={`https://wa.me/?text=${encodeURIComponent(`DRISHTI complaint registered. Token: ${result.tracking_id}. Track: ${window.location.origin}/citizen/track?token=${result.tracking_id}`)}`}
                       rel="noreferrer"
                       target="_blank"
                     >

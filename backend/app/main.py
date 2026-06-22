@@ -222,11 +222,19 @@ app = FastAPI(
 )
 
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "")
-_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
-# If no origins configured (e.g. first deploy), allow all — set ALLOWED_ORIGINS to lock down.
+_allowed_origins = [o.strip().rstrip("/") for o in _raw_origins.split(",") if o.strip()]
+
+# FRONTEND_URL is a single-origin shorthand — used when ALLOWED_ORIGINS isn't set
+_frontend_url = os.getenv("FRONTEND_URL", "").strip().rstrip("/")
+if not _allowed_origins and _frontend_url:
+    _allowed_origins = [_frontend_url]
+
 _allow_all = not _allowed_origins
 if _allow_all:
-    logger.warning("ALLOWED_ORIGINS not set — allowing all origins (set env var to restrict)")
+    logger.warning(
+        "ALLOWED_ORIGINS and FRONTEND_URL not set — allowing all origins. "
+        "Set FRONTEND_URL=https://your-frontend.onrender.com in backend env vars to restrict."
+    )
 
 app.add_middleware(
     CORSMiddleware,
