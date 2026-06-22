@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, AlertTriangle } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Radio } from "lucide-react";
 import type { MaplsMap } from "@/types/mappls";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://gridathon-production.up.railway.app";
@@ -22,14 +22,13 @@ interface HotspotData {
   hotspots: Hotspot[];
   current_hour: number;
   hour_multiplier: number;
-  hourly_rates: { hour: number; incidents: number; high_pct: number }[];
 }
 
 function riskColor(risk: number) {
   if (risk >= 0.9) return "#ef4444";
   if (risk >= 0.7) return "#f97316";
-  if (risk >= 0.5) return "#FFE600";
-  return "#22c55e";
+  if (risk >= 0.5) return "#f59e0b";
+  return "#10b981";
 }
 
 function riskLabel(risk: number) {
@@ -40,12 +39,12 @@ function riskLabel(risk: number) {
 }
 
 export default function HotspotsPage() {
-  const mapRef = useRef<MaplsMap | null>(null);
+  const mapRef    = useRef<MaplsMap | null>(null);
   const initedRef = useRef(false);
-  const [data, setData] = useState<HotspotData | null>(null);
+  const [data,       setData]       = useState<HotspotData | null>(null);
   const [fetchError, setFetchError] = useState(false);
-  const [selected, setSelected] = useState<Hotspot | null>(null);
-  const [mapReady, setMapReady] = useState(false);
+  const [selected,   setSelected]   = useState<Hotspot | null>(null);
+  const [mapReady,   setMapReady]   = useState(false);
 
   function loadData() {
     setFetchError(false);
@@ -57,7 +56,6 @@ export default function HotspotsPage() {
 
   useEffect(() => { loadData(); }, []);
 
-  // Init map once DOM is ready
   useEffect(() => {
     if (initedRef.current || !MAPPLS_KEY) return;
     initedRef.current = true;
@@ -74,13 +72,10 @@ export default function HotspotsPage() {
         });
         mapRef.current = map;
         setMapReady(true);
-      } catch (e) {
-        console.error("Hotspot map init:", e);
-      }
+      } catch (e) { console.error("Hotspot map init:", e); }
     }
 
     if (window.mappls) { tryInit(); return; }
-
     if (!document.getElementById("mappls-sdk-v15")) {
       const s = document.createElement("script");
       s.id = "mappls-sdk-v15";
@@ -88,12 +83,9 @@ export default function HotspotsPage() {
       s.async = true;
       s.onload = tryInit;
       document.head.appendChild(s);
-    } else {
-      tryInit();
-    }
+    } else { tryInit(); }
   }, []);
 
-  // Add markers once both map and data are ready
   useEffect(() => {
     if (!mapReady || !data || !mapRef.current) return;
     const sdk = window.mappls;
@@ -111,10 +103,10 @@ export default function HotspotsPage() {
             width: size,
             height: size,
           },
-          popupHtml: `<div style="font-family:monospace;font-size:12px;padding:6px;min-width:160px">
+          popupHtml: `<div style="font-family:monospace;font-size:12px;padding:6px;min-width:160px;color:#342018">
             <b style="color:${color}">${h.junction}</b><br/>
             Risk: <b>${riskLabel(h.predicted_risk)}</b> (${(h.predicted_risk * 100).toFixed(0)}%)<br/>
-            ${h.count} historical incidents &middot; ${(h.high_pct * 100).toFixed(0)}% high priority
+            ${h.count} historical &middot; ${(h.high_pct * 100).toFixed(0)}% high priority
           </div>`,
           popupOpen: false,
         });
@@ -122,126 +114,164 @@ export default function HotspotsPage() {
     });
   }, [mapReady, data]);
 
-  const istHour = data?.current_hour ?? new Date().getHours();
+  const istHour  = data?.current_hour ?? new Date().getHours();
   const peakHour = (istHour >= 8 && istHour <= 10) || (istHour >= 17 && istHour <= 20);
 
   return (
-    <div className="flex flex-col bg-[#08080F] text-[#F0F0F8]" style={{ height: "100dvh" }}>
-      {/* Header — matches app-wide nav style */}
-      <header className="flex items-center justify-between gap-4 border-b border-[#252535] px-5 py-3 shrink-0">
-        <div className="flex items-center gap-3">
-          <Link href="/" className="flex items-center gap-1.5 text-[#444455] hover:text-[#FFE600] transition-colors">
-            <ArrowLeft className="h-3.5 w-3.5" />
-            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.14em]">Back</span>
+    <div className="flex min-h-screen flex-col bg-[#fffaf6] text-[#342018]">
+
+      {/* ── Nav — same as main landing page ─────────────────────────────── */}
+      <nav className="sticky top-0 z-50 border-b-2 border-[#f2d8ca] bg-[#fffaf6]/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+          <Link className="flex items-center gap-3" href="/">
+            <div className="flex h-9 w-9 items-center justify-center rounded bg-[#ffd62f]">
+              <Radio className="h-4 w-4 text-[#342018]" />
+            </div>
+            <div>
+              <div className="font-mono text-[13px] font-bold tracking-[0.22em] text-[#342018]">DRISHTI</div>
+              <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#a88778]">Bengaluru Police · Traffic Ops</div>
+            </div>
           </Link>
-          <span className="text-[#252535]">|</span>
-          <div>
-            <span className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-[#FFE600]">
-              Predictive Hotspot Map
-            </span>
-            <span className="ml-3 font-mono text-[10px] text-[#444455]">
-              {istHour}:00 IST
-              {data && <span className="ml-2">· {data.hour_multiplier}× multiplier</span>}
-            </span>
+
+          <div className="flex items-center gap-4">
+            <Link className="flex items-center gap-1.5 text-[#795b4e] hover:text-[#342018] transition-colors text-[12px] font-semibold uppercase tracking-[0.06em]" href="/">
+              <ArrowLeft className="h-3.5 w-3.5" /> Back
+            </Link>
+            {peakHour && (
+              <div className="flex items-center gap-1.5 rounded-full border border-[#f97316]/40 bg-[#f97316]/10 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-[#f97316]">
+                <AlertTriangle className="h-3 w-3" />
+                Peak Hour
+              </div>
+            )}
           </div>
         </div>
-        {peakHour && (
-          <div className="flex items-center gap-1.5 rounded border border-[#f97316]/30 bg-[#f97316]/10 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-widest text-[#f97316]">
-            <AlertTriangle className="h-3 w-3" />
-            Peak hour — elevated risk
+      </nav>
+
+      {/* ── Page header ──────────────────────────────────────────────────── */}
+      <div className="mx-auto w-full max-w-7xl px-6 py-6">
+        <div className="section-kicker mb-1 text-[#f47f5f]">+ Predictive Intelligence</div>
+        <h1 className="text-[28px] font-black uppercase leading-none tracking-[-0.01em] text-[#342018]">
+          Hotspot Map
+        </h1>
+        <p className="mt-1 text-[12px] text-[#a88778]">
+          Current hour: {istHour}:00 IST
+          {data && <span className="ml-2">· Risk multiplier {data.hour_multiplier}×</span>}
+          {peakHour && <span className="ml-2 font-semibold text-[#f97316]">— elevated risk window</span>}
+        </p>
+      </div>
+
+      {/* ── Body ─────────────────────────────────────────────────────────── */}
+      <div className="mx-auto flex w-full max-w-7xl flex-1 gap-5 px-6 pb-8" style={{ minHeight: 0 }}>
+
+        {/* Map card */}
+        <div className="browser-card flex-1 overflow-hidden" style={{ minHeight: 520 }}>
+          <div className="browser-card-header">
+            <span className="browser-dot browser-dot-red" />
+            <span className="browser-dot browser-dot-yellow" />
+            <span className="browser-dot browser-dot-green" />
+            <span className="ml-3 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#795b4e]">
+              Bengaluru · Live Risk Map
+            </span>
+            {/* Legend inline */}
+            <span className="ml-auto flex items-center gap-3">
+              {([["Critical", "#ef4444"], ["High", "#f97316"], ["Medium", "#f59e0b"], ["Low", "#10b981"]] as const).map(([l, c]) => (
+                <span key={l} className="flex items-center gap-1">
+                  <span className="inline-block h-2 w-2 rounded-full" style={{ background: c }} />
+                  <span className="font-mono text-[9px] text-[#a88778]">{l}</span>
+                </span>
+              ))}
+            </span>
           </div>
-        )}
-      </header>
-
-      {/* Body */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Map — explicit height via parent */}
-        <div className="flex-1 relative overflow-hidden">
-          <div id={MAP_ID} style={{ width: "100%", height: "100%" }} />
-
+          <div id={MAP_ID} style={{ width: "100%", height: "calc(100% - 42px)" }} />
           {!MAPPLS_KEY && (
-            <div className="absolute inset-0 grid place-items-center bg-[#08080F] text-[12px] text-[#444455]">
-              Set <code className="mx-1 text-[#FFE600]">NEXT_PUBLIC_MAPPLS_KEY</code>
+            <div className="absolute inset-0 grid place-items-center bg-[#fffaf6] text-[12px] text-[#a88778]">
+              Set <code className="mx-1 text-[#f47f5f]">NEXT_PUBLIC_MAPPLS_KEY</code>
             </div>
           )}
-
-          {/* Legend */}
-          <div className="absolute bottom-4 left-4 z-10 rounded border border-[#252535] bg-[#0D0D15]/90 px-3 py-2 backdrop-blur">
-            {([["Critical", "#ef4444", "≥90%"], ["High", "#f97316", "70–89%"], ["Medium", "#FFE600", "50–69%"], ["Low", "#22c55e", "<50%"]] as const).map(([l, c, r]) => (
-              <div key={l} className="flex items-center gap-2 py-0.5">
-                <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: c }} />
-                <span className="font-mono text-[10px] text-[#8888A0]">{l}</span>
-                <span className="font-mono text-[9px] text-[#444455]">{r}</span>
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* Sidebar */}
-        <div className="w-72 shrink-0 border-l border-[#252535] bg-[#0D0D15] flex flex-col overflow-hidden">
-          <div className="border-b border-[#252535] px-4 py-2.5">
-            <span className="font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#444455]">
-              Top Risk Junctions
-            </span>
-          </div>
+        <div className="w-72 shrink-0 flex flex-col gap-3">
+          <div className="browser-card flex-1 overflow-hidden flex flex-col">
+            <div className="browser-card-header">
+              <span className="browser-dot browser-dot-red" />
+              <span className="browser-dot browser-dot-yellow" />
+              <span className="browser-dot browser-dot-green" />
+              <span className="ml-3 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#795b4e]">
+                Top Risk Junctions
+              </span>
+            </div>
 
-          <div className="flex-1 overflow-y-auto">
-            {!data && !fetchError && (
-              <div className="px-4 py-4 font-mono text-[11px] text-[#444455] animate-pulse">
-                Loading hotspot data…
-              </div>
-            )}
-            {fetchError && (
-              <div className="px-4 py-4 space-y-2">
-                <div className="font-mono text-[11px] text-[#ef4444]">Failed to load data.</div>
-                <button type="button" onClick={loadData} className="font-mono text-[10px] text-[#FFE600] hover:underline">
-                  Retry ↺
+            <div className="flex-1 overflow-y-auto">
+              {!data && !fetchError && (
+                <div className="px-4 py-4 font-mono text-[11px] text-[#a88778] animate-pulse">
+                  Loading hotspot data…
+                </div>
+              )}
+              {fetchError && (
+                <div className="px-4 py-4 space-y-2">
+                  <div className="font-mono text-[11px] text-[#ef4444]">Failed to load data.</div>
+                  <button type="button" onClick={loadData} className="font-mono text-[10px] text-[#f47f5f] hover:underline">
+                    Retry ↺
+                  </button>
+                </div>
+              )}
+              {data?.hotspots.map((h, i) => (
+                <button
+                  key={h.junction}
+                  type="button"
+                  onClick={() => setSelected(selected?.junction === h.junction ? null : h)}
+                  className={`w-full border-b border-[#f2d8ca] px-4 py-3 text-left transition-colors hover:bg-[#fff0e8] ${selected?.junction === h.junction ? "bg-[#fff0e8]" : ""}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-mono text-[10px] text-[#a88778] shrink-0">{String(i + 1).padStart(2, "0")}</span>
+                      <span className="text-[12px] font-semibold text-[#342018] truncate">{h.junction}</span>
+                    </div>
+                    <span
+                      className="font-mono text-[10px] font-bold shrink-0 px-1.5 py-0.5 rounded-full border"
+                      style={{ color: riskColor(h.predicted_risk), borderColor: riskColor(h.predicted_risk) + "55", background: riskColor(h.predicted_risk) + "15" }}
+                    >
+                      {(h.predicted_risk * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="mt-0.5 font-mono text-[9px] text-[#a88778] pl-7">
+                    {h.count} incidents · {(h.high_pct * 100).toFixed(0)}% high priority
+                  </div>
                 </button>
-              </div>
-            )}
-            {data?.hotspots.map((h, i) => (
-              <button
-                key={h.junction}
-                type="button"
-                onClick={() => setSelected(selected?.junction === h.junction ? null : h)}
-                className={`w-full border-b border-[#1a1a24] px-4 py-3 text-left transition-colors hover:bg-[#13131F] ${selected?.junction === h.junction ? "bg-[#13131F]" : ""}`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-mono text-[10px] text-[#444455] shrink-0">{String(i + 1).padStart(2, "0")}</span>
-                    <span className="text-[12px] font-semibold text-[#F0F0F8] truncate">{h.junction}</span>
-                  </div>
-                  <span
-                    className="font-mono text-[10px] font-bold shrink-0 px-1.5 py-0.5 rounded"
-                    style={{ color: riskColor(h.predicted_risk), background: riskColor(h.predicted_risk) + "22" }}
-                  >
-                    {(h.predicted_risk * 100).toFixed(0)}%
-                  </span>
-                </div>
-                <div className="mt-0.5 font-mono text-[9px] text-[#444455] pl-7">
-                  {h.count} incidents · {(h.high_pct * 100).toFixed(0)}% high priority
-                </div>
-              </button>
-            ))}
+              ))}
+            </div>
           </div>
 
-          {/* Selected detail */}
+          {/* Selected detail card */}
           {selected && (
-            <div className="border-t border-[#252535] bg-[#0A0A14] px-4 py-3 shrink-0">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="font-mono text-[10px] font-bold uppercase tracking-widest" style={{ color: riskColor(selected.predicted_risk) }}>
-                    {riskLabel(selected.predicted_risk)} Risk
-                  </div>
-                  <div className="mt-0.5 text-[13px] font-semibold text-[#F0F0F8]">{selected.junction}</div>
-                </div>
-                <button type="button" onClick={() => setSelected(null)} className="font-mono text-[11px] text-[#444455] hover:text-[#F0F0F8]">✕</button>
+            <div className="browser-card shrink-0">
+              <div className="browser-card-header">
+                <span className="browser-dot browser-dot-red" />
+                <span className="browser-dot browser-dot-yellow" />
+                <span className="browser-dot browser-dot-green" />
+                <span className="ml-auto font-mono text-[9px]" style={{ color: riskColor(selected.predicted_risk) }}>
+                  {riskLabel(selected.predicted_risk).toUpperCase()}
+                </span>
               </div>
-              <div className="mt-2 font-mono text-[10px] text-[#8888A0] space-y-0.5">
-                <div>Risk score: <span className="text-[#F0F0F8]">{(selected.predicted_risk * 100).toFixed(0)}%</span></div>
-                <div>Historical: <span className="text-[#F0F0F8]">{selected.count} incidents</span></div>
-                <div>High priority: <span className="text-[#F0F0F8]">{(selected.high_pct * 100).toFixed(0)}%</span></div>
-                <div className="text-[#444455]">{selected.lat.toFixed(4)}°N {selected.lng.toFixed(4)}°E</div>
+              <div className="p-4">
+                <div className="text-[14px] font-bold text-[#342018]">{selected.junction}</div>
+                <div className="mt-3 space-y-1.5">
+                  {[
+                    ["Risk score", `${(selected.predicted_risk * 100).toFixed(0)}%`],
+                    ["Historical", `${selected.count} incidents`],
+                    ["High priority", `${(selected.high_pct * 100).toFixed(0)}%`],
+                    ["Coordinates", `${selected.lat.toFixed(4)}°N ${selected.lng.toFixed(4)}°E`],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex items-center justify-between text-[11px]">
+                      <span className="text-[#a88778]">{label}</span>
+                      <span className="font-semibold text-[#342018]">{value}</span>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" onClick={() => setSelected(null)} className="mt-3 w-full text-center font-mono text-[9px] text-[#a88778] hover:text-[#342018]">
+                  Dismiss ✕
+                </button>
               </div>
             </div>
           )}
