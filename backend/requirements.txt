@@ -16,5 +16,6 @@ google-genai
 redis
 resend
 slowapi
+python-multipart
 celery[redis]
 boto3
