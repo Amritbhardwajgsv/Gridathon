@@ -8,13 +8,6 @@ import {
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://gridathon-production.up.railway.app";
 
-const SEVERITY_COLORS: Record<string, string> = {
-  Critical: "#ef4444",
-  High: "#f97316",
-  Medium: "#eab308",
-  Low: "#22c55e",
-};
-
 const TYPE_LABELS: Record<string, string> = {
   accident: "Accident",
   signal_failure: "Signal Failure",

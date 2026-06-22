@@ -35,16 +35,26 @@ function riskLabel(risk: number): string {
   return "Low";
 }
 
+interface MapplsSDK {
+  Map: new (el: HTMLElement | null, opts: Record<string, unknown>) => MapplsMap;
+  Marker: new (opts: Record<string, unknown>) => void;
+}
+
+interface MapplsMap {
+  on: (event: string, cb: () => void) => void;
+  remove?: () => void;
+}
+
 declare global {
   interface Window {
-    mappls: any;
-    MapmyIndia: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mappls: MapplsSDK & Record<string, any>;
   }
 }
 
 export default function HotspotsPage() {
   const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstance = useRef<any>(null);
+  const mapInstance = useRef<MapplsMap | null>(null);
   const [data, setData] = useState<HotspotData | null>(null);
   const [sdkReady, setSdkReady] = useState(false);
   const [selected, setSelected] = useState<Hotspot | null>(null);
