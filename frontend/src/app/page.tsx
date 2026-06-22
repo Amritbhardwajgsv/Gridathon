@@ -30,6 +30,7 @@ export const metadata: Metadata = {
 };
 
 import DescriptionPipelinePreview from "@/components/DescriptionPipelinePreview";
+import RecentIncidentsFeed from "@/components/RecentIncidentsFeed";
 
 export default function HomePage() {
   return (
@@ -220,6 +221,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Recent incidents live feed */}
+      <RecentIncidentsFeed />
 
       {/* News clippings */}
       <section className="border-b-2 border-[#252535] px-6 py-20">
