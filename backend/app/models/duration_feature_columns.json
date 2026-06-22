@@ -1,1 +1,1 @@
-["event_cause_grouped", "event_type", "priority", "requires_road_closure", "corridor", "zone", "latitude", "longitude", "hour", "day_of_week", "month", "is_weekend", "rush_hour"]
+["event_cause_grouped", "event_type", "priority", "requires_road_closure", "corridor", "zone", "latitude", "longitude", "hour", "day_of_week", "month"]
