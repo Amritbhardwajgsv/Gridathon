@@ -285,6 +285,7 @@ class CitizenGrievanceCreateRequest(BaseModel):
     latitude: float | None = None
     longitude: float | None = None
     description: str = Field(..., min_length=10, max_length=2000)
+    photo_url:   str | None = None
 
 
 class CitizenGrievanceResponse(BaseModel):
@@ -302,6 +303,7 @@ class CitizenGrievanceResponse(BaseModel):
     agent_priority_score: int | None = None
     agent_recommendation: str | None = None
     reporter_phone: str | None = None
+    photo_url: str | None = None
     created_at: datetime
 
 

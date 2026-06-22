@@ -246,6 +246,19 @@ export default function ComplaintsPage() {
                   <div className="mt-4 rounded-xl border border-[#f2d8ca] bg-[#fff8f2] p-3 text-[12px] leading-5 text-[#795b4e]">
                     {selectedItem.description}
                   </div>
+                  {selectedItem.photo_url && (
+                    <div className="mt-3">
+                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[#3d5278]">Incident Photo</p>
+                      <a href={selectedItem.photo_url} target="_blank" rel="noopener noreferrer">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={selectedItem.photo_url}
+                          alt="Incident photo"
+                          className="w-full rounded-xl border border-[#1c2e4a] object-cover max-h-52 hover:opacity-90 transition cursor-pointer"
+                        />
+                      </a>
+                    </div>
+                  )}
                 </div>
 
                 {/* Triage score */}

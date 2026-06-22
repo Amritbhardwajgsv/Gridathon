@@ -154,6 +154,7 @@ export interface CitizenGrievancePayload {
   latitude?: number;
   longitude?: number;
   description: string;
+  photo_url?: string;
 }
 
 export interface CitizenGrievance {
@@ -171,6 +172,7 @@ export interface CitizenGrievance {
   agent_priority_score?: number | null;
   agent_recommendation?: string | null;
   reporter_phone?: string | null;
+  photo_url?: string | null;
   created_at: string;
 }
 
