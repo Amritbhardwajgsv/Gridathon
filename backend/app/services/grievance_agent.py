@@ -106,9 +106,17 @@ _TYPE_DEFAULT: dict[str, str] = {
     "signal_failure": "Medium",      "event_congestion": "Medium",
     "illegal_parking": "Low",        "other": "Low",
 }
-_CRITICAL_KW = frozenset({"ambulance", "fire engine", "emergency", "critical", "death", "fatality", "stampede"})
-_HIGH_KW     = frozenset({"blocked", "stuck", "major", "barricaded", "diverted", "road closed"})
-_LOW_KW      = frozenset({"slow", "minor", "slight", "small", "light traffic"})
+_CRITICAL_KW = frozenset({
+    "ambulance", "fire engine", "emergency", "critical", "death", "fatality", "stampede",
+    "dies", "died", "dead", "killed", "killing", "toppled", "overturned", "outbreak",
+    "fire", "explosion", "serious injury", "critical condition",
+})
+_HIGH_KW = frozenset({
+    "blocked", "stuck", "major", "barricaded", "diverted", "road closed",
+    "accident", "crash", "collision", "truck", "lorry", "bus accident",
+    "road block", "complete block",
+})
+_LOW_KW  = frozenset({"slow", "minor", "slight", "small", "light traffic"})
 
 def _rule_severity(complaint_type: str, description: str | None) -> str:
     base = _TYPE_DEFAULT.get(complaint_type, "Medium")
@@ -198,6 +206,17 @@ def triage_grievance(payload: CitizenGrievanceCreateRequest) -> tuple[int, str, 
         severity     = _rule_severity(payload.complaint_type, payload.description)
         score        = _SEV_SCORE.get(severity, 22)
         ml_pred      = None
+
+    # ── Keyword safety net — ML can't downgrade a fatality/fire to Low ────────
+    desc_lower = (payload.description or "").lower()
+    if any(kw in desc_lower for kw in _CRITICAL_KW) and severity in ("Low", "Medium"):
+        severity = "Critical"
+        score    = max(score, 92)
+        logger.info("Severity upgraded to Critical by keyword override")
+    elif any(kw in desc_lower for kw in _HIGH_KW) and severity == "Low":
+        severity = "High"
+        score    = max(score, 72)
+        logger.info("Severity upgraded to High by keyword override")
 
     # ── Generate Gemini recommendation text ───────────────────────────────────
     fallback = _rule_text(score)
