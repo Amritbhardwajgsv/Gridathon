@@ -106,17 +106,13 @@ _TYPE_DEFAULT: dict[str, str] = {
     "signal_failure": "Medium",      "event_congestion": "Medium",
     "illegal_parking": "Low",        "other": "Low",
 }
-_CRITICAL_KW = frozenset({"ambulance", "fire engine", "emergency", "critical", "death", "fatality", "stampede"})
-_HIGH_KW     = frozenset({"blocked", "stuck", "major", "barricaded", "diverted", "road closed"})
-_LOW_KW      = frozenset({"slow", "minor", "slight", "small", "light traffic"})
+_LOW_KW = frozenset({"slow", "minor", "slight", "small", "light traffic"})
 
 def _rule_severity(complaint_type: str, description: str | None) -> str:
     base = _TYPE_DEFAULT.get(complaint_type, "Medium")
     if not description:
         return base
     desc = description.lower()
-    if any(kw in desc for kw in _CRITICAL_KW): return "Critical"
-    if any(kw in desc for kw in _HIGH_KW) and base in ("Low", "Medium"): return "High"
     if any(kw in desc for kw in _LOW_KW) and base == "High": return "Medium"
     return base
 
@@ -142,7 +138,6 @@ def triage_grievance(payload: CitizenGrievanceCreateRequest) -> tuple[int, str, 
     """
     now = datetime.now(timezone.utc)
     road_closure = _has_road_closure(payload.complaint_type, payload.description)
-
     ml_pred: dict | None = None
 
     # ── Try XGBoost (new models) ──────────────────────────────────────────────
@@ -168,9 +163,9 @@ def triage_grievance(payload: CitizenGrievanceCreateRequest) -> tuple[int, str, 
         score = min(100, _SEV_SCORE[severity] + min(8, int(duration_min / 30)))
     elif _RF_LOADED:
         row = pd.DataFrame([{
-            "event_cause_grouped":   _CAUSE.get(payload.complaint_type, "others"),
+            "event_cause_grouped":   effective_cause,
             "event_type":            "unplanned",
-            "priority":              _PRIORITY.get(payload.complaint_type, "Low"),
+            "priority":              effective_priority,
             "requires_road_closure": str(road_closure),   # encoder trained on "True"/"False" strings
             "corridor":              _map_corridor(payload.corridor),
             "zone":                  _map_zone(payload.zone),

@@ -669,21 +669,13 @@ def create_citizen_grievance(
     background_tasks: BackgroundTasks,
 ) -> CitizenGrievanceResponse:
     try:
-        result = grievance_repository.create(request)
-        # Gemini validation runs after the response is sent — citizen gets their
-        # tracking ID instantly; Gemini marks the record if it fails.
-        if request.description and len(request.description.strip()) >= 10:
-            background_tasks.add_task(
-                grievance_repository.validate_async,
-                result.tracking_id,
-                request.description,
-            )
+        result = grievance_repository.create_instant(request)
+        background_tasks.add_task(
+            grievance_repository.process_async,
+            result.tracking_id,
+            request,
+        )
         return result
-    except GrievanceRejectedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"code": "FIREWALL_REJECTED", "reason": str(exc)},
-        ) from exc
     except Exception as exc:
         logger.exception("Grievance creation failed: %s", exc)
         raise HTTPException(

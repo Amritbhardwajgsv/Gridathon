@@ -238,10 +238,13 @@ def _get_personnel(priority_pred: int, duration_min: float, road_closure: bool) 
     return base
 
 
-def _get_urgency(priority_pred: int, duration_min: float, road_closure: bool) -> str:
-    if priority_pred == 1 and duration_min > 240:                    return "CRITICAL"
-    if priority_pred == 1 or (road_closure and duration_min > 120):  return "HIGH"
-    if duration_min > 120:                                           return "MEDIUM"
+_SEVERE_CAUSES = frozenset({"accident", "vip_movement"})
+
+def _get_urgency(priority_pred: int, duration_min: float, road_closure: bool, event_cause: str = "others") -> str:
+    severe = event_cause in _SEVERE_CAUSES
+    if (priority_pred == 1 and duration_min > 120) or (severe and duration_min > 60): return "CRITICAL"
+    if priority_pred == 1 or severe or (road_closure and duration_min > 60):          return "HIGH"
+    if duration_min > 120:                                                             return "MEDIUM"
     return "LOW"
 
 
@@ -370,7 +373,7 @@ def run_ml_only(
     duration_min  = float(_dur_model.predict(X)[0])
     priority_pred = int(_pri_model.predict(X)[0])
     personnel     = _get_personnel(priority_pred, duration_min, requires_road_closure)
-    urgency       = _get_urgency(priority_pred, duration_min, requires_road_closure)
+    urgency       = _get_urgency(priority_pred, duration_min, requires_road_closure, event_cause)
 
     return {
         "estimated_duration_min": round(duration_min, 1),
