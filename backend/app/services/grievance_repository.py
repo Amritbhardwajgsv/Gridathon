@@ -157,7 +157,7 @@ class GrievanceRepository:
             original_description = payload.description or ""
             english_description = _predictor.translate_to_english(original_description)
             if english_description != original_description:
-                logger.info(
+                _log.info(
                     "Translated complaint %s from non-English: %r → %r",
                     tracking_id, original_description[:80], english_description[:80],
                 )
