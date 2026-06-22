@@ -65,18 +65,20 @@ export default function PersonnelMap({
   const [error, setError] = useState<string | null>(null);
   const [officerQuery, setOfficerQuery] = useState("");
   const [selectedPersonnelId, setSelectedPersonnelId] = useState<string | null>(null);
+  const [selectedOfficer, setSelectedOfficer] = useState<PolicePersonnel | null>(null);
 
   const locatedPersonnel = useMemo(
     () => personnel.filter((p) => point(p.current_latitude, p.current_longitude)),
     [personnel],
   );
+  // Search ALL personnel — not just those with GPS — so officers without live location still appear
   const officerMatches = useMemo(() => {
     const query = officerQuery.trim().toLowerCase();
     if (!query) return [];
-    return locatedPersonnel.filter((p) =>
+    return personnel.filter((p) =>
       p.name.toLowerCase().includes(query) || p.badge_id.toLowerCase().includes(query)
-    ).slice(0, 6);
-  }, [locatedPersonnel, officerQuery]);
+    ).slice(0, 8);
+  }, [personnel, officerQuery]);
 
   // Mirror latest props into a ref so marker draws always use fresh data
   // without triggering the one-time init effect
@@ -170,6 +172,7 @@ export default function PersonnelMap({
 
   function selectOfficer(officer: PolicePersonnel) {
     setSelectedPersonnelId(officer.id);
+    setSelectedOfficer(officer);
     setOfficerQuery(`${officer.name} · ${officer.badge_id}`);
     if (mapRef.current) focusOfficer(mapRef.current, officer);
   }
@@ -277,22 +280,86 @@ export default function PersonnelMap({
           </div>
           {officerQuery.trim() && !selectedPersonnelId && (
             <div className="mt-1 overflow-hidden rounded-xl border border-[#f2c9b6] bg-white shadow-lg">
-              {officerMatches.length ? officerMatches.map((officer) => (
-                <button
-                  className="flex w-full items-center justify-between gap-3 border-b border-[#f2d8ca] px-3 py-2.5 text-left last:border-0 hover:bg-[#fff0e8]"
-                  key={officer.id}
-                  onClick={() => selectOfficer(officer)}
-                  type="button"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-[12px] font-bold text-[#342018]">{officer.name}</span>
-                    <span className="block font-mono text-[9px] text-[#a88778]">{officer.badge_id} · {officer.rank}</span>
-                  </span>
-                  <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${officer.is_available ? "bg-[#22d3ee]" : "bg-[#3b82f6]"}`} />
-                </button>
-              )) : (
-                <div className="px-3 py-3 text-[11px] text-[#a88778]">No live GPS match.</div>
+              {officerMatches.length ? officerMatches.map((officer) => {
+                const hasGps = !!point(officer.current_latitude, officer.current_longitude);
+                return (
+                  <button
+                    className="flex w-full items-center justify-between gap-3 border-b border-[#f2d8ca] px-3 py-2.5 text-left last:border-0 hover:bg-[#fff0e8]"
+                    key={officer.id}
+                    onClick={() => selectOfficer(officer)}
+                    type="button"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-[12px] font-bold text-[#342018]">{officer.name}</span>
+                      <span className="block font-mono text-[9px] text-[#a88778]">{officer.badge_id} · {officer.rank}</span>
+                    </span>
+                    <span className="flex items-center gap-1.5 shrink-0">
+                      {hasGps
+                        ? <span title="Live GPS" className="h-2.5 w-2.5 rounded-full bg-[#22d3ee]" />
+                        : <span title="No live GPS" className="h-2.5 w-2.5 rounded-full bg-[#d1d5db]" />
+                      }
+                    </span>
+                  </button>
+                );
+              }) : (
+                <div className="px-3 py-3 text-[11px] text-[#a88778]">No officer found.</div>
               )}
+            </div>
+          )}
+
+          {/* Officer location card — shown after selecting */}
+          {selectedOfficer && selectedPersonnelId && (
+            <div className="mt-2 rounded-xl border border-[#f2c9b6] bg-white/97 px-4 py-3 shadow-lg text-[11px]">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-bold text-[#342018] text-[12px] truncate">{selectedOfficer.name}</div>
+                  <div className="font-mono text-[9px] text-[#a88778] mt-0.5">{selectedOfficer.badge_id} · {selectedOfficer.rank} · {selectedOfficer.unit_name}</div>
+                </div>
+                <button
+                  type="button"
+                  className="text-[#a88778] hover:text-[#342018] shrink-0 mt-0.5"
+                  onClick={() => { setSelectedPersonnelId(null); setSelectedOfficer(null); setOfficerQuery(""); }}
+                >✕</button>
+              </div>
+              <div className="mt-2 pt-2 border-t border-[#f2e8e2]">
+                {point(selectedOfficer.current_latitude, selectedOfficer.current_longitude) ? (
+                  <>
+                    <div className="flex items-center gap-1.5 text-[#22a870] font-semibold">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#22d3ee]" />
+                      Live GPS — map centered
+                    </div>
+                    <div className="font-mono text-[10px] text-[#795b4e] mt-1">
+                      {Number(selectedOfficer.current_latitude).toFixed(5)}°N,&nbsp;
+                      {Number(selectedOfficer.current_longitude).toFixed(5)}°E
+                    </div>
+                    {selectedOfficer.last_location_at && (
+                      <div className="text-[9px] text-[#a88778] mt-0.5">
+                        Last updated: {new Date(selectedOfficer.last_location_at).toLocaleString("en-IN")}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-1.5 text-[#9ca3af] font-semibold">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#d1d5db]" />
+                      No live GPS
+                    </div>
+                    {selectedOfficer.last_location_at && selectedOfficer.current_latitude ? (
+                      <div className="mt-1">
+                        <div className="font-mono text-[10px] text-[#795b4e]">
+                          Last known: {Number(selectedOfficer.current_latitude).toFixed(5)}°N,&nbsp;
+                          {Number(selectedOfficer.current_longitude).toFixed(5)}°E
+                        </div>
+                        <div className="text-[9px] text-[#a88778] mt-0.5">
+                          As of {new Date(selectedOfficer.last_location_at).toLocaleString("en-IN")}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-[9px] text-[#a88778] mt-1">No location data stored in DB</div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           )}
         </div>
