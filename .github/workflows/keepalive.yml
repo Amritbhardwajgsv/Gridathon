@@ -1,25 +1,25 @@
-name: Keep Render Services Alive
+name: Keep Services Alive
 
 on:
   schedule:
-    # Every 10 minutes — Render free tier spins down after 15 min of inactivity
+    # Every 10 minutes — keeps Render frontend warm
     - cron: "*/10 * * * *"
-  workflow_dispatch: # allow manual trigger
+  workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping backend
+      - name: Ping backend (Railway)
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
-            https://drishtibackend-bljb.onrender.com/health)
+            https://gridathon-production.up.railway.app/health)
           echo "Backend /health → $STATUS"
           if [ "$STATUS" != "200" ]; then
             echo "::warning::Backend returned $STATUS"
           fi
 
-      - name: Ping frontend
+      - name: Ping frontend (Render)
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
             https://drishti-ex4s.onrender.com)
