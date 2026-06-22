@@ -97,6 +97,8 @@ class _DeploymentChatManager:
 
 
 _chat_mgr = _DeploymentChatManager()
+_grievance_mgr = _DeploymentChatManager()  # reuse same manager for grievance broadcasts
+
 
 
 # ---------------------------------------------------------------------------
@@ -745,6 +747,19 @@ def create_citizen_grievance(
                 result.tracking_id,
                 body,
             )
+        background_tasks.add_task(
+            _grievance_mgr.broadcast,
+            "officers",
+            {
+                "type": "new_grievance",
+                "tracking_id": result.tracking_id,
+                "complaint_type": result.complaint_type,
+                "severity": result.severity,
+                "location": result.location_text,
+                "zone": result.zone,
+                "created_at": result.created_at.isoformat() if result.created_at else None,
+            },
+        )
         return result
     except GrievanceRejectedError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
@@ -1090,3 +1105,225 @@ async def deployment_chat_ws(
     except Exception:
         _chat_mgr.disconnect(websocket, deployment_id)
         logger.error("Chat WS error: room=%s", deployment_id, exc_info=True)
+
+
+# ---------------------------------------------------------------------------
+# WebSocket: real-time grievance feed for officer dashboard
+# ---------------------------------------------------------------------------
+
+@app.websocket("/ws/grievances")
+async def grievance_feed(websocket: WebSocket):
+    """Officers connect here to receive instant push when a new grievance is filed."""
+    token = websocket.query_params.get("token", "")
+    try:
+        from app.core.auth import decode_jwt
+        user = decode_jwt(token)
+        if not user:
+            await websocket.close(code=1008)
+            return
+    except Exception:
+        await websocket.close(code=1008)
+        return
+    await _grievance_mgr.connect(websocket, "officers")
+    await websocket.send_json({"type": "connected", "message": "Grievance feed active"})
+    try:
+        while True:
+            data = await websocket.receive_json()
+            if data.get("type") == "ping":
+                await websocket.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        _grievance_mgr.disconnect(websocket, "officers")
+    except Exception:
+        _grievance_mgr.disconnect(websocket, "officers")
+
+
+# ---------------------------------------------------------------------------
+# Hotspots: predictive risk based on EDA data
+# ---------------------------------------------------------------------------
+
+import csv as _csv
+
+def _load_hotspots() -> list[dict]:
+    path = Path(__file__).resolve().parents[1] / "ml" / "junction_hotspots.csv"
+    if not path.exists():
+        return []
+    rows = []
+    with open(path, newline="") as f:
+        for r in _csv.DictReader(f):
+            rows.append({
+                "junction": r["junction"],
+                "count": int(r["count"]),
+                "lat": float(r["lat"]),
+                "lng": float(r["lng"]),
+                "high_pct": float(r["high_pct"]),
+            })
+    return rows
+
+def _load_hourly_rates() -> list[dict]:
+    path = Path(__file__).resolve().parents[1] / "ml" / "hourly_incident_rates.csv"
+    if not path.exists():
+        return []
+    rows = []
+    with open(path, newline="") as f:
+        for r in _csv.DictReader(f):
+            rows.append({
+                "hour": int(float(r["hour"])),
+                "incidents": int(r["incidents"]),
+                "high_pct": float(r["high_pct"]),
+                "closure_pct": float(r["closure_pct"]),
+            })
+    return rows
+
+_HOTSPOTS_CACHE: list[dict] = []
+_HOURLY_CACHE: list[dict] = []
+
+@app.get("/citizen/incidents/hotspots", tags=["citizen"])
+def incident_hotspots() -> dict:
+    """Return junction hotspots + current-hour risk for predictive heatmap."""
+    global _HOTSPOTS_CACHE, _HOURLY_CACHE
+    if not _HOTSPOTS_CACHE:
+        _HOTSPOTS_CACHE = _load_hotspots()
+    if not _HOURLY_CACHE:
+        _HOURLY_CACHE = _load_hourly_rates()
+
+    from datetime import datetime, timezone
+    current_hour = datetime.now(timezone.utc).hour
+    ist_hour = (current_hour + 5) % 24  # IST offset approx
+
+    hour_data = next((h for h in _HOURLY_CACHE if h["hour"] == ist_hour), None)
+    hour_multiplier = (hour_data["incidents"] / 500) if hour_data else 1.0
+
+    hotspots = [
+        {
+            **h,
+            "predicted_risk": round(min(1.0, h["high_pct"] * hour_multiplier), 3),
+        }
+        for h in _HOTSPOTS_CACHE
+    ]
+    hotspots.sort(key=lambda x: x["predicted_risk"], reverse=True)
+
+    return {
+        "hotspots": hotspots[:30],
+        "current_hour": ist_hour,
+        "hour_multiplier": round(hour_multiplier, 2),
+        "hourly_rates": _HOURLY_CACHE,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Analytics: zone/severity breakdown + resolution stats
+# ---------------------------------------------------------------------------
+
+@app.get("/police/analytics", tags=["police"])
+def analytics_summary() -> dict:
+    """Aggregated stats for the analytics dashboard."""
+    if not grievance_repository.is_enabled:
+        return {}
+    try:
+        from app.core.database import get_pool as _get_pool
+        from psycopg.rows import dict_row as _dict_row
+        with _get_pool().connection() as conn:
+            conn.row_factory = _dict_row
+            with conn.cursor() as cur:
+                cur.execute("""
+                    select
+                        zone,
+                        count(*) as total,
+                        count(*) filter (where severity = 'Critical') as critical,
+                        count(*) filter (where severity = 'High') as high,
+                        count(*) filter (where severity = 'Medium') as medium,
+                        count(*) filter (where severity = 'Low') as low
+                    from citizen_grievances
+                    where created_at > now() - interval '7 days'
+                    group by zone
+                    order by total desc
+                """)
+                by_zone = cur.fetchall()
+
+                cur.execute("""
+                    select complaint_type, count(*) as total
+                    from citizen_grievances
+                    where created_at > now() - interval '7 days'
+                    group by complaint_type
+                    order by total desc
+                """)
+                by_type = cur.fetchall()
+
+                cur.execute("""
+                    select status, count(*) as total
+                    from citizen_grievances
+                    group by status
+                    order by total desc
+                """)
+                by_status = cur.fetchall()
+
+                cur.execute("""
+                    select
+                        extract(hour from created_at at time zone 'Asia/Kolkata') as hour,
+                        count(*) as total
+                    from citizen_grievances
+                    where created_at > now() - interval '7 days'
+                    group by hour
+                    order by hour
+                """)
+                by_hour = cur.fetchall()
+
+                cur.execute("""
+                    select count(*) as total,
+                           count(*) filter (where status in ('resolved','closed')) as resolved,
+                           count(*) filter (where severity = 'Critical') as critical_count
+                    from citizen_grievances
+                """)
+                totals = cur.fetchone()
+
+    except Exception as exc:
+        logger.warning("Analytics query failed: %s", exc)
+        return {}
+
+    return {
+        "by_zone": [dict(r) for r in by_zone],
+        "by_type": [dict(r) for r in by_type],
+        "by_status": [dict(r) for r in by_status],
+        "by_hour": [{"hour": int(r["hour"]), "total": r["total"]} for r in by_hour],
+        "totals": dict(totals) if totals else {},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Anomaly detection: zone surge alerts
+# ---------------------------------------------------------------------------
+
+@app.get("/police/anomalies", tags=["police"])
+def zone_anomalies() -> list[dict]:
+    """Return zones with 3+ incidents in the last 30 minutes (surge alerts)."""
+    if not grievance_repository.is_enabled:
+        return []
+    try:
+        from app.core.database import get_pool as _get_pool
+        from psycopg.rows import dict_row as _dict_row
+        with _get_pool().connection() as conn:
+            conn.row_factory = _dict_row
+            with conn.cursor() as cur:
+                cur.execute("""
+                    select zone, count(*) as incident_count,
+                           max(severity) as max_severity
+                    from citizen_grievances
+                    where created_at > now() - interval '30 minutes'
+                      and status not in ('rejected', 'closed')
+                      and zone is not null
+                    group by zone
+                    having count(*) >= 3
+                    order by incident_count desc
+                """)
+                rows = cur.fetchall()
+    except Exception:
+        return []
+    return [
+        {
+            "zone": r["zone"],
+            "incident_count": r["incident_count"],
+            "max_severity": r["max_severity"],
+            "alert": f"SURGE: {r['incident_count']} incidents in {r['zone']} zone in last 30 min",
+        }
+        for r in rows
+    ]

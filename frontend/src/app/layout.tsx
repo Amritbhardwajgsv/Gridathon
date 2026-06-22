@@ -30,6 +30,15 @@ export const metadata: Metadata = {
     template: "%s | DRISHTI · BTP",
   },
   description: SITE_DESC,
+  manifest: "/manifest.webmanifest",
+  icons: {
+    apple: "/apple-touch-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "DRISHTI",
+  },
   keywords: [
     "Bengaluru traffic",
     "Bangalore police",

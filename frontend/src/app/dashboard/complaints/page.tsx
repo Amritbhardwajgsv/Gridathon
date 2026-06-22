@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import dynamic from "next/dynamic";
 import ProgressBar from "@/components/ProgressBar";
+import { useGrievanceFeed } from "@/hooks/useGrievanceFeed";
 
 const PredictionForm = dynamic(() => import("@/components/PredictionForm"), {
   loading: () => <div className="flex h-48 items-center justify-center text-[12px] text-[#3d5278]"><Loader2 className="h-4 w-4 animate-spin text-[#22d3ee] mr-2" />Loading form…</div>,
@@ -65,6 +66,29 @@ export default function ComplaintsPage() {
   const [showResolveModal,   setShowResolveModal]   = useState(false);
   const [resolveForm,        setResolveForm]        = useState({ duration: "", personnel: "", cause: "", notes: "" });
   const [isResolving,        setIsResolving]        = useState(false);
+
+  // Real-time feed + anomaly alerts
+  const [newAlert, setNewAlert] = useState<string | null>(null);
+  const [anomalies, setAnomalies] = useState<{ zone: string; incident_count: number; alert: string }[]>([]);
+
+  useGrievanceFeed((event) => {
+    setNewAlert(`New ${event.severity} incident: ${event.complaint_type?.replace(/_/g, " ")} · ${event.location}`);
+    setTimeout(() => setNewAlert(null), 6000);
+    loadItems();
+  });
+
+  useEffect(() => {
+    const token = localStorage.getItem("token") || "";
+    const API = process.env.NEXT_PUBLIC_API_URL || "https://gridathon-production.up.railway.app";
+    const fetchAnomalies = () =>
+      fetch(`${API}/police/anomalies`, { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then(setAnomalies)
+        .catch(() => {});
+    fetchAnomalies();
+    const t = setInterval(fetchAnomalies, 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   async function loadItems() {
     setIsLoading(true);
@@ -127,6 +151,25 @@ export default function ComplaintsPage() {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <div className="space-y-5">
+        {/* Real-time new incident toast */}
+        {newAlert && (
+          <div className="fixed top-4 right-4 z-50 bg-[#e8a034] text-black px-4 py-2 rounded-lg shadow-lg text-sm font-semibold animate-pulse max-w-sm">
+            🔔 {newAlert}
+          </div>
+        )}
+
+        {/* Anomaly surge alerts */}
+        {anomalies.length > 0 && (
+          <div className="space-y-1">
+            {anomalies.map((a) => (
+              <div key={a.zone} className="bg-red-900/40 border border-red-500/50 rounded-lg px-4 py-2 flex items-center gap-2 text-sm">
+                <ShieldAlert className="h-4 w-4 text-red-400 shrink-0" />
+                <span className="text-red-300 font-semibold">{a.alert}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
