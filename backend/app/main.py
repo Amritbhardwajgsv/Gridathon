@@ -684,6 +684,39 @@ def create_citizen_grievance(
         ) from exc
 
 
+@app.get("/citizen/incidents/recent", tags=["citizen"])
+def recent_public_incidents() -> list[dict]:
+    """Return last 5 resolved/submitted incidents — public, no PII."""
+    if not grievance_repository.is_enabled:
+        return []
+    import psycopg
+    from psycopg.rows import dict_row
+    with psycopg.connect(grievance_repository.database_url, row_factory=dict_row) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select complaint_type, severity, location_text, zone, corridor, status, created_at
+                from citizen_grievances
+                where status not in ('evaluating', 'rejected')
+                order by created_at desc
+                limit 5
+                """
+            )
+            rows = cur.fetchall()
+    return [
+        {
+            "complaint_type": r["complaint_type"],
+            "severity":       r["severity"],
+            "location":       r["location_text"],
+            "zone":           r["zone"],
+            "corridor":       r["corridor"],
+            "status":         r["status"],
+            "created_at":     r["created_at"].isoformat(),
+        }
+        for r in rows
+    ]
+
+
 @app.get("/citizen/grievances/{tracking_id}", response_model=CitizenGrievanceResponse, tags=["citizen"])
 def track_citizen_grievance(tracking_id: str) -> CitizenGrievanceResponse:
     grievance = grievance_repository.get_by_tracking_id(tracking_id)
