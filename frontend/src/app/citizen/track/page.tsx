@@ -37,17 +37,42 @@ const SEV_BADGE: Record<string, string> = {
   Low:      "badge badge-green",
 };
 
+const TERMINAL_STATUSES = new Set(["resolved", "closed", "rejected"]);
+
 export default function CitizenTrackPage() {
   const [trackingId, setTrackingId] = useState("");
   const [result,     setResult]     = useState<CitizenGrievance | null>(null);
   const [error,      setError]      = useState("");
   const [notFound,   setNotFound]   = useState(false);
   const [loading,    setLoading]    = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [flashNew,   setFlashNew]   = useState(false);
 
   useEffect(() => {
     const token = new URLSearchParams(window.location.search).get("token");
     if (token) { setTrackingId(token); lookup(token); }
   }, []);
+
+  // Auto-poll every 15s while complaint is active
+  useEffect(() => {
+    if (!result || TERMINAL_STATUSES.has(result.status)) return;
+    const id = setInterval(() => silentRefresh(result.tracking_id), 15_000);
+    return () => clearInterval(id);
+  }, [result?.tracking_id, result?.status]);
+
+  async function silentRefresh(token: string) {
+    try {
+      const updated = await trackCitizenGrievance(token);
+      setResult((prev) => {
+        if (prev && updated.status !== prev.status) {
+          setFlashNew(true);
+          setTimeout(() => setFlashNew(false), 2000);
+        }
+        return updated;
+      });
+      setLastUpdated(new Date());
+    } catch { /* silent */ }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -59,7 +84,9 @@ export default function CitizenTrackPage() {
     if (!token.trim()) { setError("Enter your DRISHTI tracking token."); return; }
     setLoading(true);
     try {
-      setResult(await trackCitizenGrievance(token.trim()));
+      const res = await trackCitizenGrievance(token.trim());
+      setResult(res);
+      setLastUpdated(new Date());
     } catch (err: unknown) {
       const axiosErr = err as { response?: { status?: number } };
       if (axiosErr?.response?.status === 404) setNotFound(true);
@@ -70,6 +97,7 @@ export default function CitizenTrackPage() {
   }
 
   const currentStep = result ? STATUS_ORDER.indexOf(result.status) : -1;
+  const isLive = result && !TERMINAL_STATUSES.has(result.status);
 
   return (
     <div className="min-h-screen bg-[#08080F] text-[#F0F0F8]">
@@ -83,7 +111,14 @@ export default function CitizenTrackPage() {
             </div>
             <span className="font-mono text-[12px] font-bold tracking-[0.22em] text-[#FFE600]">DRISHTI</span>
           </Link>
-          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#444455]">Karnataka State Police · Bengaluru Traffic</div>
+          <div className="flex items-center gap-4">
+            <Link href="/citizen/hotspots" className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#444455] hover:text-[#FFE600] transition-colors">
+              Hotspot Map
+            </Link>
+            <Link href="/citizen/map" className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#444455] hover:text-[#FFE600] transition-colors">
+              Live Incidents
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -155,12 +190,25 @@ export default function CitizenTrackPage() {
           <div className="mt-10 space-y-4">
 
             {/* Header card */}
-            <div className="browser-card">
+            <div className={`browser-card transition-all duration-500 ${flashNew ? "ring-2 ring-green-400/60" : ""}`}>
               <div className="browser-card-header border-b-2 border-[#252535]">
                 <span className="browser-dot browser-dot-red" />
                 <span className="browser-dot browser-dot-yellow" />
                 <span className="browser-dot browser-dot-green" />
                 <span className="ml-3 font-mono text-[9px] font-bold uppercase tracking-[0.18em] text-[#FFE600]">{result.tracking_id}</span>
+                <span className="ml-auto flex items-center gap-1.5">
+                  {isLive && (
+                    <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-green-400">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+                      Live
+                    </span>
+                  )}
+                  {lastUpdated && (
+                    <span className="font-mono text-[8px] text-[#333344]">
+                      Updated {lastUpdated.toLocaleTimeString()}
+                    </span>
+                  )}
+                </span>
               </div>
               <div className="p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
