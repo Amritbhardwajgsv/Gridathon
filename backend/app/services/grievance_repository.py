@@ -1,7 +1,7 @@
 import json
 from contextlib import contextmanager
 from uuid import uuid4
-
+import logging
 from psycopg.rows import dict_row
 
 from app.core.config import get_database_url
