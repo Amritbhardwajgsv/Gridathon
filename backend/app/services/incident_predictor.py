@@ -21,14 +21,41 @@ from app.core.config import get_gemini_api_key, load_env_file
 MODELS_DIR = Path(__file__).resolve().parents[1] / "model"
 
 STRUCT_FEATURES = [
-    "hour", "day_of_week", "month", "is_night", "reporting_delay_min",
-    "latitude", "longitude", "requires_road_closure",
+    "hour", "day_of_week", "month", "is_night", "is_peak_am", "is_peak_pm",
+    "reporting_delay_min", "latitude", "longitude",
+    "requires_road_closure", "corridor_risk",
     "event_cause_enc", "veh_type_enc", "corridor_enc",
     "police_station_enc", "zone_enc",
 ]
 EMB_DIM              = 384
 TRANSFORMER_FEATURES = [f"emb_{i}" for i in range(EMB_DIM)]
 ALL_FEATURES         = STRUCT_FEATURES + TRANSFORMER_FEATURES
+
+# ── Corridor risk lookup (from EDA) ──────────────────────────────────────────
+import csv as _csv_mod
+
+def _load_corridor_risk() -> dict[str, float]:
+    path = Path(__file__).resolve().parents[1] / "ml" / "corridor_risk_scores.csv"
+    if not path.exists():
+        return {}
+    result: dict[str, float] = {}
+    with open(path, newline="") as f:
+        for row in _csv_mod.DictReader(f):
+            name = row.get("corridor", "").strip().lower()
+            pct  = row.get("high_priority_pct", row.get("high_pct", "0.5"))
+            try:
+                result[name] = float(pct)
+            except ValueError:
+                pass
+    return result
+
+_CORRIDOR_RISK: dict[str, float] = {}
+
+def _get_corridor_risk(corridor: str) -> float:
+    global _CORRIDOR_RISK
+    if not _CORRIDOR_RISK:
+        _CORRIDOR_RISK = _load_corridor_risk()
+    return _CORRIDOR_RISK.get(corridor.strip().lower(), 0.5)
 
 _GEMINI_TIMEOUT_S = 20
 
@@ -348,11 +375,14 @@ def run_ml_only(
         "hour"                 : hour,
         "day_of_week"          : day_of_week,
         "month"                : month,
-        "is_night"             : 1 if (hour >= 21 or hour <= 6) else 0,
+        "is_night"             : 1 if (hour >= 20 or hour <= 6) else 0,
+        "is_peak_am"           : 1 if 4 <= hour <= 7 else 0,
+        "is_peak_pm"           : 1 if 19 <= hour <= 22 else 0,
         "reporting_delay_min"  : 0,
         "latitude"             : latitude,
         "longitude"            : longitude,
         "requires_road_closure": int(requires_road_closure),
+        "corridor_risk"        : _get_corridor_risk(corridor),
         "event_cause_enc"      : _safe_encode(_le["event_cause"],    event_cause),
         "veh_type_enc"         : _safe_encode(_le["veh_type"],       veh_type),
         "corridor_enc"         : _safe_encode(_le["corridor"],        corridor),
