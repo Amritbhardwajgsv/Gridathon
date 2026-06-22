@@ -171,7 +171,7 @@ def triage_grievance(payload: CitizenGrievanceCreateRequest) -> tuple[int, str, 
             "event_cause_grouped":   _CAUSE.get(payload.complaint_type, "others"),
             "event_type":            "unplanned",
             "priority":              _PRIORITY.get(payload.complaint_type, "Low"),
-            "requires_road_closure": road_closure,
+            "requires_road_closure": str(road_closure),   # encoder trained on "True"/"False" strings
             "corridor":              _map_corridor(payload.corridor),
             "zone":                  _map_zone(payload.zone),
             "latitude":              payload.latitude  if payload.latitude  is not None else _BLR_LAT,
