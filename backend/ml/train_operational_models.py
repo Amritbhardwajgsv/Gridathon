@@ -115,7 +115,14 @@ def build_operational_frame(csv_path: Path) -> pd.DataFrame:
     base_df["description_text"] = text_series.iloc[: len(base_df)]
 
     base_df["predicted_duration_minutes"] = base_df["duration_minutes"]
-    base_df["impact_level"] = base_df["duration_minutes"].apply(impact_level)
+    base_df["impact_level"] = base_df.apply(
+        lambda r: impact_level(
+            r["duration_minutes"],
+            r.get("event_cause_grouped", ""),
+            str(r.get("requires_road_closure", "")).lower() == "true",
+        ),
+        axis=1,
+    )
     base_df["estimated_crowd_size"] = base_df.apply(estimate_crowd_size, axis=1)
     base_df["urgency_score"] = base_df.apply(derive_urgency_score, axis=1)
     base_df["risk_count"] = base_df["description_text"].apply(count_risks)
@@ -176,6 +183,8 @@ def prepare_training_frame(raw_df: pd.DataFrame) -> pd.DataFrame:
         model_df[column] = pd.to_numeric(model_df[column], errors="coerce")
 
     model_df = model_df.dropna(subset=NUMERIC_COLUMNS)
+    # Cap at 24 hours — anything longer is a data-quality issue (unclosed ticket)
+    model_df = model_df[model_df["duration_minutes"].between(0, 1440)].copy()
     return model_df
 
 
@@ -192,14 +201,30 @@ def build_preprocessor() -> ColumnTransformer:
     )
 
 
-def impact_level(duration_minutes: float) -> str:
-    if duration_minutes <= 72:
-        return "Low"
-    if duration_minutes <= 793:
-        return "Medium"
-    if duration_minutes <= 17146:
-        return "High"
-    return "Critical"
+_HIGH_CAUSE = frozenset({"accident", "road_conditions", "vip_movement"})
+_MED_CAUSE  = frozenset({
+    "tree_fall", "water_logging", "construction",
+    "public_event", "procession", "protest",
+})
+
+
+def impact_level(duration_minutes: float, event_cause: str = "", requires_road_closure: bool = False) -> str:
+    score = 0
+    if duration_minutes > 60:  score += 1
+    if duration_minutes > 180: score += 1
+    if duration_minutes > 480: score += 1
+    if duration_minutes > 960: score += 1
+    cause = str(event_cause).lower()
+    if cause in _HIGH_CAUSE:
+        score += 3
+    elif cause in _MED_CAUSE:
+        score += 1
+    if requires_road_closure:
+        score += 2
+    if score >= 7: return "Critical"
+    if score >= 5: return "High"
+    if score >= 3: return "Medium"
+    return "Low"
 
 
 def train_operational_models(df: pd.DataFrame) -> dict[str, Any]:
