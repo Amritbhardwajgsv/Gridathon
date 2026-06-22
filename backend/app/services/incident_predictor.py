@@ -18,7 +18,7 @@ import pandas as pd
 
 from app.core.config import get_gemini_api_key, load_env_file
 
-MODELS_DIR = Path(__file__).resolve().parents[1] / "models"
+MODELS_DIR = Path(__file__).resolve().parents[1] / "model"
 
 STRUCT_FEATURES = [
     "hour", "day_of_week", "month", "is_night", "reporting_delay_min",
