@@ -209,3 +209,86 @@ def send_rejection_email(
         logger.info("Rejection email sent to %s", to_email)
     except Exception as exc:
         logger.warning("Could not send rejection email to %s: %s", to_email, exc)
+
+
+# ─── Citizen grievance notifications ──────────────────────────────────────────
+
+import os as _os
+_FRONTEND = _os.getenv("FRONTEND_URL", "https://drishti-ex4s.onrender.com").rstrip("/")
+_TRACK_BASE = f"{_FRONTEND}/citizen/track"
+
+_STATUS_LABEL = {
+    "submitted":   "Submitted to Police",
+    "triaged":     "Under Review",
+    "dispatched":  "Officers Dispatched",
+    "in_progress": "Being Handled",
+    "resolved":    "✓ Resolved",
+    "closed":      "Closed",
+}
+
+
+def send_complaint_confirmation(email: str, tracking_id: str, location: str) -> None:
+    r = _get_client()
+    if not r or not email:
+        return
+    track_link = f"{_TRACK_BASE}?token={tracking_id}"
+    html = f"""
+<body style="margin:0;padding:0;background:#fffaf6;font-family:sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+<table width="520" cellpadding="0" cellspacing="0" style="border:2px solid #f2d8ca;border-radius:16px;overflow:hidden;">
+  <tr style="background:#FFE600;"><td style="padding:18px 24px;">
+    <b style="font-size:16px;color:#08080F;letter-spacing:0.1em;text-transform:uppercase;">DRISHTI · Complaint Received</b>
+  </td></tr>
+  <tr><td style="padding:24px;background:#fffaf6;">
+    <p style="margin:0 0 16px;color:#342018;">Your traffic incident report has been received and is being evaluated by our AI system.</p>
+    <table cellpadding="0" cellspacing="0" style="width:100%;background:#fff0e8;border:1.5px solid #f2d8ca;border-radius:8px;padding:16px;margin-bottom:20px;">
+      <tr><td style="padding:6px 0;color:#795b4e;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;width:130px;">Tracking ID</td>
+          <td style="padding:6px 0;color:#342018;font-family:monospace;font-weight:700;">{tracking_id}</td></tr>
+      <tr><td style="padding:6px 0;color:#795b4e;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;">Location</td>
+          <td style="padding:6px 0;color:#342018;">{location}</td></tr>
+    </table>
+    <a href="{track_link}" style="display:inline-block;background:#FFE600;color:#08080F;font-weight:800;padding:12px 24px;border-radius:999px;text-decoration:none;font-size:13px;text-transform:uppercase;letter-spacing:0.08em;">Track your complaint →</a>
+    <p style="margin:20px 0 0;font-size:11px;color:#a88778;">Valid reports are actioned by Bengaluru Traffic Police. Invalid reports are automatically removed.</p>
+  </td></tr>
+</table></td></tr></table></body>"""
+    try:
+        r.Emails.send({"from": _from_address(), "to": [email],
+                       "subject": f"Complaint Received — {tracking_id}", "html": html})
+        logger.info("Confirmation email sent to %s for %s", email, tracking_id)
+    except Exception as exc:
+        logger.warning("Confirmation email failed: %s", exc)
+
+
+def send_status_update(email: str, tracking_id: str, new_status: str, location: str) -> None:
+    r = _get_client()
+    if not r or not email:
+        return
+    label = _STATUS_LABEL.get(new_status, new_status.replace("_", " ").title())
+    color = "#10B981" if new_status in ("resolved", "closed") else "#3B82F6"
+    track_link = f"{_TRACK_BASE}?token={tracking_id}"
+    html = f"""
+<body style="margin:0;padding:0;background:#fffaf6;font-family:sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:32px 16px;">
+<table width="520" cellpadding="0" cellspacing="0" style="border:2px solid #f2d8ca;border-radius:16px;overflow:hidden;">
+  <tr style="background:#FFE600;"><td style="padding:18px 24px;">
+    <b style="font-size:16px;color:#08080F;letter-spacing:0.1em;text-transform:uppercase;">DRISHTI · Status Update</b>
+  </td></tr>
+  <tr><td style="padding:24px;background:#fffaf6;">
+    <p style="margin:0 0 16px;color:#342018;">Your complaint status has changed.</p>
+    <table cellpadding="0" cellspacing="0" style="width:100%;background:#fff0e8;border:1.5px solid #f2d8ca;border-radius:8px;padding:16px;margin-bottom:20px;">
+      <tr><td style="padding:6px 0;color:#795b4e;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;width:130px;">Tracking ID</td>
+          <td style="padding:6px 0;font-family:monospace;font-weight:700;color:#342018;">{tracking_id}</td></tr>
+      <tr><td style="padding:6px 0;color:#795b4e;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;">Location</td>
+          <td style="padding:6px 0;color:#342018;">{location}</td></tr>
+      <tr><td style="padding:6px 0;color:#795b4e;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;">Status</td>
+          <td style="padding:6px 0;font-weight:800;color:{color};">{label}</td></tr>
+    </table>
+    <a href="{track_link}" style="display:inline-block;background:#FFE600;color:#08080F;font-weight:800;padding:12px 24px;border-radius:999px;text-decoration:none;font-size:13px;text-transform:uppercase;letter-spacing:0.08em;">View full status →</a>
+  </td></tr>
+</table></td></tr></table></body>"""
+    try:
+        r.Emails.send({"from": _from_address(), "to": [email],
+                       "subject": f"Complaint Update — {label} ({tracking_id})", "html": html})
+        logger.info("Status email sent to %s: %s → %s", email, tracking_id, new_status)
+    except Exception as exc:
+        logger.warning("Status email failed: %s", exc)

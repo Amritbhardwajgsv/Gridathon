@@ -314,6 +314,13 @@ class GrievanceStatusUpdateRequest(BaseModel):
     notes: str | None = Field(default=None, max_length=500)
 
 
+class GrievanceResolutionRequest(BaseModel):
+    actual_duration_min:       int   | None = None
+    actual_personnel_deployed: int   | None = None
+    confirmed_cause:           str   | None = Field(default=None, max_length=100)
+    resolution_notes:          str   | None = Field(default=None, max_length=1000)
+
+
 class DeploymentStatusUpdateRequest(BaseModel):
     status: Literal["draft", "issued", "enroute", "onscene", "resolved", "escalated", "cancelled"]
     notes: str | None = Field(default=None, max_length=500)

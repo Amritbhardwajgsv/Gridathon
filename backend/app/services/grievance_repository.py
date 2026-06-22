@@ -1,14 +1,17 @@
 import json
+from contextlib import contextmanager
 from uuid import uuid4
 
 from psycopg.rows import dict_row
 
 from app.core.config import get_database_url
+from app.core.database import get_pool
 from app.schemas import CitizenGrievanceCreateRequest, CitizenGrievanceResponse, GrievanceStatusUpdateRequest
 from app.services.grievance_agent import triage_grievance
 from app.services.mapmyindia_client import mapmyindia_client
 from app.services.event_queue import event_queue
 from app.services.cache import cache, GRIEVANCES_LIST
+from app.services.email_service import send_complaint_confirmation, send_status_update
 
 
 import logging as _logging
@@ -40,6 +43,20 @@ class GrievanceRejectedError(Exception):
     """Raised when the LLM firewall rejects the complaint description."""
 
 
+@contextmanager
+def _db_conn(database_url: str):
+    """Use pool when initialised, fall back to a direct connection."""
+    try:
+        pool = get_pool()
+        with pool.connection() as conn:
+            conn.row_factory = dict_row
+            yield conn
+    except RuntimeError:
+        import psycopg
+        with psycopg.connect(database_url, row_factory=dict_row) as conn:
+            yield conn
+
+
 class GrievanceRepository:
     def __init__(self) -> None:
         self.database_url = get_database_url()
@@ -47,6 +64,39 @@ class GrievanceRepository:
     @property
     def is_enabled(self) -> bool:
         return bool(self.database_url)
+
+    def _find_nearby_duplicate(self, lat: float | None, lng: float | None, location_text: str) -> str | None:
+        """Return existing tracking_id if an open complaint within ~300m exists in the last 30 min."""
+        if not self.database_url:
+            return None
+        with _db_conn(self.database_url) as conn:
+            with conn.cursor() as cur:
+                if lat is not None and lng is not None:
+                    cur.execute(
+                        """
+                        select tracking_id from citizen_grievances
+                        where status not in ('rejected', 'evaluating', 'resolved', 'closed')
+                          and created_at > now() - interval '30 minutes'
+                          and latitude  is not null
+                          and abs(latitude  - %(lat)s) < 0.003
+                          and abs(longitude - %(lng)s) < 0.003
+                        limit 1
+                        """,
+                        {"lat": lat, "lng": lng},
+                    )
+                else:
+                    cur.execute(
+                        """
+                        select tracking_id from citizen_grievances
+                        where status not in ('rejected', 'evaluating', 'resolved', 'closed')
+                          and created_at > now() - interval '30 minutes'
+                          and lower(location_text) = lower(%(loc)s)
+                        limit 1
+                        """,
+                        {"loc": location_text},
+                    )
+                row = cur.fetchone()
+                return row["tracking_id"] if row else None
 
     def create_instant(self, payload: CitizenGrievanceCreateRequest) -> CitizenGrievanceResponse:
         """Insert a placeholder record immediately and return the tracking ID.
@@ -56,10 +106,20 @@ class GrievanceRepository:
 
         import psycopg
 
+        # Deduplication — check for same location in last 30 min
+        dup = self._find_nearby_duplicate(
+            payload.latitude, payload.longitude, payload.location_text or ""
+        )
+        if dup:
+            raise GrievanceRejectedError(
+                f"An incident at this location is already being handled (ref: {dup}). "
+                "Track it instead of submitting a duplicate."
+            )
+
         tracking_id = f"DRS-BTP-{uuid4().hex[:10].upper()}"
         payload_data = self._to_dict(payload)
 
-        with psycopg.connect(self.database_url, row_factory=dict_row) as conn:
+        with _db_conn(self.database_url) as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     f"""
@@ -80,7 +140,11 @@ class GrievanceRepository:
                 row = cur.fetchone()
 
         cache.delete(GRIEVANCES_LIST)
-        return CitizenGrievanceResponse(**row)
+        result = CitizenGrievanceResponse(**row)
+        # best-effort confirmation email
+        if payload.reporter_email:
+            send_complaint_confirmation(payload.reporter_email, tracking_id, payload.location_text or "")
+        return result
 
     def process_async(self, tracking_id: str, payload: CitizenGrievanceCreateRequest) -> None:
         """Background task: run geocoding + ML triage + Gemini firewall.
@@ -121,7 +185,7 @@ class GrievanceRepository:
                 return
 
             # Step 5: update record with full ML results
-            with psycopg.connect(self.database_url, row_factory=dict_row) as conn:
+            with _db_conn(self.database_url) as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
@@ -182,7 +246,7 @@ class GrievanceRepository:
     def _delete_grievance(self, tracking_id: str, reason: str) -> None:
         import psycopg
         try:
-            with psycopg.connect(self.database_url, row_factory=dict_row) as conn:
+            with _db_conn(self.database_url) as conn:
                 with conn.cursor() as cur:
                     cur.execute(
                         "delete from citizen_grievances where upper(tracking_id) = upper(%s)",
@@ -220,7 +284,7 @@ class GrievanceRepository:
         payload_data["severity"] = computed_severity
         nlp_features = self._training_features(payload_data, recommendation)
 
-        with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+        with _db_conn(self.database_url) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     f"""
@@ -293,7 +357,7 @@ class GrievanceRepository:
 
         import psycopg
 
-        with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+        with _db_conn(self.database_url) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
@@ -301,21 +365,10 @@ class GrievanceRepository:
                     set status = %s
                     where id = %s
                     returning
-                        id,
-                        tracking_id,
-                        complaint_type,
-                        severity,
-                        location_text,
-                        zone,
-                        corridor,
-                        latitude,
-                        longitude,
-                        description,
-                        status,
-                        agent_priority_score,
-                        agent_recommendation,
-                        reporter_phone,
-                        created_at
+                        id, tracking_id, complaint_type, severity, location_text,
+                        zone, corridor, latitude, longitude, description, status,
+                        agent_priority_score, agent_recommendation,
+                        reporter_phone, reporter_email, created_at
                     """,
                     (request.status, grievance_id),
                 )
@@ -324,19 +377,23 @@ class GrievanceRepository:
                     event_queue.publish(
                         "grievance.status_changed",
                         str(row["tracking_id"]),
-                        {
-                            "grievance_id": str(row["id"]),
-                            "tracking_id" : row["tracking_id"],
-                            "new_status"  : row["status"],
-                            "severity"    : row["severity"],
-                            "zone"        : row["zone"],
-                            "corridor"    : row["corridor"],
-                        },
+                        {"grievance_id": str(row["id"]), "tracking_id": row["tracking_id"],
+                         "new_status": row["status"], "severity": row["severity"],
+                         "zone": row["zone"], "corridor": row["corridor"]},
                         cursor=cursor,
                     )
 
         cache.delete(GRIEVANCES_LIST)
-        return CitizenGrievanceResponse(**row) if row else None
+        if row:
+            if row.get("reporter_email"):
+                send_status_update(
+                    row["reporter_email"], row["tracking_id"],
+                    row["status"], row["location_text"] or "",
+                )
+            # strip reporter_email before building response (not in schema)
+            safe = {k: v for k, v in row.items() if k != "reporter_email"}
+            return CitizenGrievanceResponse(**safe)
+        return None
 
     def list_recent(self, limit: int = 50) -> list[CitizenGrievanceResponse]:
         if not self.database_url:
@@ -348,7 +405,7 @@ class GrievanceRepository:
 
         import psycopg
 
-        with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+        with _db_conn(self.database_url) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
@@ -385,7 +442,7 @@ class GrievanceRepository:
 
         import psycopg
 
-        with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+        with _db_conn(self.database_url) as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """

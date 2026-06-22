@@ -162,6 +162,22 @@ export async function updateGrievanceStatus(
   return response.data;
 }
 
+export async function resolveGrievanceWithFeedback(
+  grievanceId: string,
+  payload: {
+    actual_duration_min?: number | null;
+    actual_personnel_deployed?: number | null;
+    confirmed_cause?: string | null;
+    resolution_notes?: string | null;
+  }
+): Promise<{ tracking_id: string; status: string }> {
+  const response = await api.patch<{ tracking_id: string; status: string }>(
+    `/police/grievances/${encodeURIComponent(grievanceId)}/resolve`,
+    payload
+  );
+  return response.data;
+}
+
 export async function officerLodgeGrievance(
   payload: CitizenGrievancePayload
 ): Promise<CitizenGrievance> {
