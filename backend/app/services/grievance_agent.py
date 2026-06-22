@@ -56,45 +56,6 @@ _PRIORITY: dict[str, str] = {
     "illegal_parking":       "Low",
     "other":                 "Low",
 }
-
-# NLP-based complaint type detection from description text
-# Used when complaint_type == "other" (citizen form always sends "other")
-_NLP_CAUSE_MAP: dict[str, tuple[str, str]] = {
-    # keyword → (cause_grouped, priority)
-    "accident":   ("accident",        "High"),
-    "crash":      ("accident",        "High"),
-    "collision":  ("accident",        "High"),
-    "toppled":    ("accident",        "High"),
-    "overturned": ("accident",        "High"),
-    "dies":       ("accident",        "High"),
-    "died":       ("accident",        "High"),
-    "dead":       ("accident",        "High"),
-    "killed":     ("accident",        "High"),
-    "fire":       ("accident",        "High"),
-    "blocked":    ("road_conditions", "High"),
-    "road block": ("road_conditions", "High"),
-    "closed":     ("road_conditions", "High"),
-    "flooding":   ("water_logging",   "High"),
-    "waterlog":   ("water_logging",   "High"),
-    "tree fall":  ("tree_fall",       "High"),
-    "tree down":  ("tree_fall",       "High"),
-    "signal":     ("others",          "Medium"),
-    "breakdown":  ("vehicle_breakdown","Medium"),
-    "stalled":    ("vehicle_breakdown","Medium"),
-    "protest":    ("procession",      "Medium"),
-    "rally":      ("procession",      "Medium"),
-    "event":      ("public_event",    "Medium"),
-}
-
-def _detect_complaint_type(description: str | None) -> tuple[str, str]:
-    """Return (cause_grouped, priority) inferred from description text."""
-    if not description:
-        return "others", "Low"
-    desc = description.lower()
-    for keyword, (cause, priority) in _NLP_CAUSE_MAP.items():
-        if keyword in desc:
-            return cause, priority
-    return "others", "Low"
 _ZONE: dict[str, str] = {
     "central zone": "Central Zone 1", "east zone": "East Zone 1",
     "west zone": "West Zone 1",       "north zone": "North Zone 1",
@@ -145,25 +106,13 @@ _TYPE_DEFAULT: dict[str, str] = {
     "signal_failure": "Medium",      "event_congestion": "Medium",
     "illegal_parking": "Low",        "other": "Low",
 }
-_CRITICAL_KW = frozenset({
-    "ambulance", "fire engine", "emergency", "critical", "death", "fatality", "stampede",
-    "dies", "died", "dead", "killed", "killing", "toppled", "overturned", "outbreak",
-    "fire", "explosion", "serious injury", "critical condition",
-})
-_HIGH_KW = frozenset({
-    "blocked", "stuck", "major", "barricaded", "diverted", "road closed",
-    "accident", "crash", "collision", "truck", "lorry", "bus accident",
-    "road block", "complete block",
-})
-_LOW_KW  = frozenset({"slow", "minor", "slight", "small", "light traffic"})
+_LOW_KW = frozenset({"slow", "minor", "slight", "small", "light traffic"})
 
 def _rule_severity(complaint_type: str, description: str | None) -> str:
     base = _TYPE_DEFAULT.get(complaint_type, "Medium")
     if not description:
         return base
     desc = description.lower()
-    if any(kw in desc for kw in _CRITICAL_KW): return "Critical"
-    if any(kw in desc for kw in _HIGH_KW) and base in ("Low", "Medium"): return "High"
     if any(kw in desc for kw in _LOW_KW) and base == "High": return "Medium"
     return base
 
@@ -189,14 +138,6 @@ def triage_grievance(payload: CitizenGrievanceCreateRequest) -> tuple[int, str, 
     """
     now = datetime.now(timezone.utc)
     road_closure = _has_road_closure(payload.complaint_type, payload.description)
-
-    # citizen form always sends complaint_type="other" — infer from description
-    effective_cause, effective_priority = (
-        (_CAUSE.get(payload.complaint_type, "others"), _PRIORITY.get(payload.complaint_type, "Low"))
-        if payload.complaint_type != "other"
-        else _detect_complaint_type(payload.description)
-    )
-
     ml_pred: dict | None = None
 
     # ── Try XGBoost (new models) ──────────────────────────────────────────────
@@ -252,17 +193,6 @@ def triage_grievance(payload: CitizenGrievanceCreateRequest) -> tuple[int, str, 
         severity     = _rule_severity(payload.complaint_type, payload.description)
         score        = _SEV_SCORE.get(severity, 22)
         ml_pred      = None
-
-    # ── Keyword safety net — ML can't downgrade a fatality/fire to Low ────────
-    desc_lower = (payload.description or "").lower()
-    if any(kw in desc_lower for kw in _CRITICAL_KW) and severity in ("Low", "Medium"):
-        severity = "Critical"
-        score    = max(score, 92)
-        logger.info("Severity upgraded to Critical by keyword override")
-    elif any(kw in desc_lower for kw in _HIGH_KW) and severity == "Low":
-        severity = "High"
-        score    = max(score, 72)
-        logger.info("Severity upgraded to High by keyword override")
 
     # ── Generate Gemini recommendation text ───────────────────────────────────
     fallback = _rule_text(score)
