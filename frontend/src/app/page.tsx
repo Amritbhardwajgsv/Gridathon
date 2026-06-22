@@ -80,15 +80,20 @@ export default function HomePage() {
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden border-b-2 border-[#252535] px-6 pb-24 pt-20">
-        <div className="grid-overlay pointer-events-none absolute inset-0 opacity-[0.03]" />
-        <div className="pointer-events-none absolute left-1/2 top-1/2 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,230,0,0.04)_0%,transparent_65%)]" />
+        {/* Animated background grid */}
+        <div className="grid-overlay grid-breathe pointer-events-none absolute inset-0" />
 
-        <div className="reveal-up relative mx-auto max-w-7xl">
+        {/* Drifting orbs */}
+        <div className="hero-orb orb-a h-[560px] w-[560px] bg-[#FFE600]/[0.06] -top-20 right-[10%]" />
+        <div className="hero-orb orb-b h-[380px] w-[380px] bg-[#f47f5f]/[0.04] bottom-0 left-[5%]" />
+        <div className="hero-orb orb-c h-[280px] w-[280px] bg-[#22D3EE]/[0.03] top-1/3 right-[30%]" />
+
+        <div className="relative mx-auto max-w-7xl">
           <div className="grid gap-14 lg:grid-cols-[minmax(0,1fr)_480px]">
             <div className="flex flex-col justify-center">
 
               {/* Live badge */}
-              <div className="mb-8 inline-flex w-fit items-center gap-2.5 rounded-full border-2 border-[#FFE600]/25 bg-[#FFE600]/8 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#FFE600]">
+              <div className="badge-pulse mb-8 inline-flex w-fit items-center gap-2.5 rounded-full border-2 border-[#FFE600]/25 bg-[#FFE600]/8 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#FFE600]">
                 <span className="live-breathe h-2 w-2 rounded-full bg-[#FFE600]" />
                 Bengaluru Police · Active Operations
               </div>
@@ -97,21 +102,21 @@ export default function HomePage() {
                 <span className="typing-text">AI sees the signal. Teams move.</span>
               </div>
 
-              {/* Main headline */}
+              {/* Main headline — word-by-word entrance */}
               <h1 className="text-[48px] font-black leading-[0.96] tracking-[-0.02em] md:text-[68px] uppercase">
-                <span className="block text-[#F0F0F8]">Dynamic</span>
-                <span className="block text-[#FFE600]">Resource</span>
-                <span className="block text-[#F0F0F8]">Intelligence.</span>
+                <span className="word-1 block text-[#F0F0F8]">Dynamic</span>
+                <span className="word-2 text-shimmer block">Resource</span>
+                <span className="word-3 block text-[#F0F0F8]">Intelligence.</span>
               </h1>
 
-              <p className="mt-7 max-w-lg text-[15px] leading-7 text-[#8888A0]">
+              <p className="reveal-up anim-d-700 mt-7 max-w-lg text-[15px] leading-7 text-[#8888A0]">
                 Describe the traffic problem in detail. DRISHTI extracts the operational
                 fields, assesses urgency, and prepares the incident for police action.
                 Citizens explain what happened; the command team handles the rest.
               </p>
 
               {/* CTA row */}
-              <div className="mt-9 flex flex-wrap gap-3">
+              <div className="reveal-up anim-d-850 mt-9 flex flex-wrap gap-3">
                 <Link className="btn-primary" href="/login">
                   <ShieldCheck className="h-4 w-4" />
                   Police Login
@@ -127,15 +132,15 @@ export default function HomePage() {
                 </Link>
               </div>
 
-              {/* Stats strip */}
+              {/* Stats strip — staggered entrance */}
               <div className="mt-12 grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {[
-                  { v: "1",   l: "Input",           s: "Detailed description" },
-                  { v: "NLP", l: "Auto Extraction", s: "Structured incident fields" },
-                  { v: "AI",  l: "Assessment",      s: "Priority and resources" },
-                  { v: "24/7", l: "Police Workflow", s: "Review to resolution" },
+                  { v: "1",    l: "Input",           s: "Detailed description",      cls: "stat-1" },
+                  { v: "NLP",  l: "Auto Extraction",  s: "Structured incident fields", cls: "stat-2" },
+                  { v: "AI",   l: "Assessment",       s: "Priority and resources",     cls: "stat-3" },
+                  { v: "24/7", l: "Police Workflow",  s: "Review to resolution",       cls: "stat-4" },
                 ].map((stat) => (
-                  <div className="rounded border-2 border-[#252535] bg-[#0F0F1A] px-4 py-3" key={stat.l}>
+                  <div className={`${stat.cls} rounded border-2 border-[#252535] bg-[#0F0F1A] px-4 py-3`} key={stat.l}>
                     <div className="font-mono text-[22px] font-bold text-[#FFE600]">{stat.v}</div>
                     <div className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.06em] text-[#F0F0F8]">{stat.l}</div>
                     <div className="mt-0.5 text-[10px] text-[#444455]">{stat.s}</div>
@@ -208,6 +213,26 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ── Marquee ticker strip ─────────────────────────────────────────────── */}
+      <div className="marquee-wrap border-y-2 border-[#252535] bg-[#08080F] py-3">
+        <div className="marquee-track gap-0 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#333344]">
+          {[...Array(2)].flatMap((_, ri) =>
+            [
+              "● Bengaluru Traffic Police",
+              "● AI-Powered Dispatch",
+              "● 10M+ City Population",
+              "● Real-Time GPS Tracking",
+              "● NLP Field Extraction",
+              "● 24/7 Command Operations",
+              "● Predictive Hotspot Analysis",
+              "● Zero-Delay Escalation",
+            ].map((item, i) => (
+              <span key={`${ri}-${i}`} className="px-8">{item}</span>
+            ))
+          )}
+        </div>
+      </div>
 
       {/* ── ADL-style yellow search bar CTA ─────────────────────────────────── */}
       <section className="border-b-2 border-[#252535] px-6 py-10">

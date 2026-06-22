@@ -20,7 +20,6 @@ export default function ScrollAnimationsProvider() {
     sections.forEach((el) => {
       const rect = el.getBoundingClientRect();
       if (rect.top < window.innerHeight + 40) {
-        // already in view on mount — reveal immediately, no flash
         el.setAttribute("data-visible", "");
       } else {
         el.setAttribute("data-reveal", "");
@@ -39,6 +38,46 @@ export default function ScrollAnimationsProvider() {
         }
       });
     });
+
+    // Count-up animation for [data-count-target] elements
+    function animateCount(el: Element) {
+      const raw = el.getAttribute("data-count-target") ?? "0";
+      const target = parseFloat(raw);
+      const suffix = el.getAttribute("data-count-suffix") ?? "";
+      const duration = 1400;
+      const start = performance.now();
+      const isInt = Number.isInteger(target);
+
+      function step(now: number) {
+        const t = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - t, 3); // ease-out-cubic
+        const current = eased * target;
+        el.textContent = (isInt ? Math.floor(current) : current.toFixed(1)) + suffix;
+        if (t < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    const countEls = document.querySelectorAll("[data-count-target]");
+    if (countEls.length > 0) {
+      const countObs = new IntersectionObserver((entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            animateCount(e.target);
+            countObs.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.5 });
+
+      countEls.forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        if (rect.top < window.innerHeight) {
+          animateCount(el);
+        } else {
+          countObs.observe(el);
+        }
+      });
+    }
 
     return () => observer.disconnect();
   }, []);
