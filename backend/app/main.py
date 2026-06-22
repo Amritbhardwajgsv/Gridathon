@@ -844,6 +844,9 @@ async def deployment_chat_ws(
     try:
         while True:
             data = await websocket.receive_json()
+            if data.get("type") == "ping":
+                await websocket.send_json({"type": "pong"})
+                continue
             text = (data.get("message") or "").strip()
             if not text:
                 continue

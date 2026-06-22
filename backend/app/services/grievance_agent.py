@@ -161,12 +161,8 @@ def triage_grievance(payload: CitizenGrievanceCreateRequest) -> tuple[int, str, 
 
     # ── Derive severity ───────────────────────────────────────────────────────
     if ml_pred:
-        priority_str = ml_pred.get("priority", "Low")
-        severity = "High" if priority_str == "High" else "Medium"
-        # Upgrade to Critical if urgency says so
-        if ml_pred.get("urgency") == "CRITICAL":
-            severity = "Critical"
-        # Use ML duration to set a floor score
+        urgency = ml_pred.get("urgency", "LOW")
+        severity = {"CRITICAL": "Critical", "HIGH": "High", "MEDIUM": "Medium", "LOW": "Low"}.get(urgency, "Medium")
         duration_min = ml_pred["estimated_duration_min"]
         score = min(100, _SEV_SCORE[severity] + min(8, int(duration_min / 30)))
     elif _RF_LOADED:
