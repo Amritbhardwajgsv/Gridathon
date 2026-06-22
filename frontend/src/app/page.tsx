@@ -58,6 +58,9 @@ export default function HomePage() {
             <Link className="px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-[#8888A0] transition hover:text-[#F0F0F8]" href="/citizen/track">
               Track
             </Link>
+            <Link className="px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-[#8888A0] transition hover:text-[#F0F0F8]" href="/citizen/hotspots">
+              Hotspots
+            </Link>
             <Link
               className="ml-2 inline-flex items-center gap-1.5 rounded border-2 border-[#252535] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#8888A0] transition hover:border-[#FFE600] hover:text-[#FFE600]"
               href="/register"
