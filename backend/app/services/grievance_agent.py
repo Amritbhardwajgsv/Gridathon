@@ -137,7 +137,9 @@ def triage_grievance(payload: CitizenGrievanceCreateRequest) -> tuple[int, str, 
       text, duration_min, personnel, urgency, detected_cause, detected_veh_type
     """
     now = datetime.now(timezone.utc)
-    road_closure = _has_road_closure(payload.complaint_type, payload.description)
+    road_closure     = _has_road_closure(payload.complaint_type, payload.description)
+    effective_cause    = _CAUSE.get(payload.complaint_type, "others")
+    effective_priority = _PRIORITY.get(payload.complaint_type, "Low")
     ml_pred: dict | None = None
 
     # ── Try XGBoost (new models) ──────────────────────────────────────────────

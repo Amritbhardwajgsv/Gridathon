@@ -811,8 +811,10 @@ def public_incidents_map() -> list[dict]:
         return []
     from psycopg.rows import dict_row
     try:
-        with get_pool().connection() as conn:
-            conn.row_factory = dict_row
+        from app.core.database import get_pool as _get_pool
+        from psycopg.rows import dict_row as _dict_row
+        with _get_pool().connection() as conn:
+            conn.row_factory = _dict_row
             with conn.cursor() as cur:
                 cur.execute(
                     """
