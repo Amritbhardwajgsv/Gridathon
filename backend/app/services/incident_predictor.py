@@ -77,15 +77,44 @@ _le: dict       = {}
 _HF_MODEL   = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 _HF_API_URL = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{_HF_MODEL}"
 
+_hf_log = logging.getLogger("drishti.hf_embed")
+
+
+def _hf_status() -> dict:
+    """Return a dict describing HuggingFace readiness — used by /health."""
+    import os
+    key = os.getenv("HF_API_KEY", "")
+    return {
+        "key_set":  bool(key),
+        "model":    _HF_MODEL,
+        "emb_dim":  EMB_DIM,
+        "status":   "active" if key else "degraded — zero embeddings",
+    }
+
 
 def _hf_embed(text: str) -> list[float] | None:
-    """Call HuggingFace Inference API to get 384-dim embedding. Returns None on failure."""
-    import logging, os, requests
-    log = logging.getLogger("drishti.hf")
+    """Call HuggingFace Inference API for a 384-dim sentence embedding.
+
+    Logs clearly at every decision point so you can tell from the server
+    log exactly whether real embeddings or zero-padding is being used.
+    Returns None on any failure; caller falls back to zero-padding.
+    """
+    import os
+    import requests
+
     key = os.getenv("HF_API_KEY", "")
     if not key:
-        log.warning("HF_API_KEY not set — using zero embeddings")
+        _hf_log.warning(
+            "HF_API_KEY not set — XGBoost text signal DISABLED; "
+            "all embedding features will be zero. "
+            "Set HF_API_KEY in Render env vars to enable semantic embeddings."
+        )
         return None
+
+    _hf_log.info(
+        "HuggingFace embed request: model=%s text_len=%d chars",
+        _HF_MODEL, len(text),
+    )
     try:
         resp = requests.post(
             _HF_API_URL,
@@ -93,26 +122,81 @@ def _hf_embed(text: str) -> list[float] | None:
             json={"inputs": text, "options": {"wait_for_model": True}},
             timeout=15,
         )
+
         if resp.status_code == 200:
             data = resp.json()
-            # API returns list-of-lists for batched input; unwrap if needed
             vec = data[0] if isinstance(data[0], list) else data
-            log.info("HuggingFace embedding OK — %d dims", len(vec))
+            if not isinstance(vec, list) or len(vec) != EMB_DIM:
+                _hf_log.error(
+                    "HuggingFace returned unexpected shape: expected list[%d], got %s len=%s "
+                    "— falling back to zero embeddings",
+                    EMB_DIM, type(vec).__name__, len(vec) if isinstance(vec, list) else "?",
+                )
+                return None
+            _hf_log.info("HuggingFace embed OK: dims=%d", len(vec))
             return vec
-        log.warning("HuggingFace API returned %s: %s", resp.status_code, resp.text[:200])
+
+        if resp.status_code == 401:
+            _hf_log.error(
+                "HuggingFace auth FAILED (401) — HF_API_KEY is set but rejected. "
+                "Regenerate your token at huggingface.co/settings/tokens. "
+                "Falling back to zero embeddings."
+            )
+        elif resp.status_code == 503:
+            _hf_log.warning(
+                "HuggingFace model still loading (503) — request is queued server-side; "
+                "wait_for_model=True is set but timed out. Falling back to zero embeddings."
+            )
+        elif resp.status_code == 429:
+            _hf_log.warning(
+                "HuggingFace rate limit hit (429) — free tier exhausted. "
+                "Consider upgrading to Inference Endpoints. Falling back to zero embeddings."
+            )
+        else:
+            _hf_log.warning(
+                "HuggingFace API returned HTTP %s: %s — falling back to zero embeddings",
+                resp.status_code, resp.text[:300],
+            )
+        return None
+
+    except requests.Timeout:
+        _hf_log.warning(
+            "HuggingFace request timed out after 15s — model may be cold-starting. "
+            "Falling back to zero embeddings. If this is frequent, increase timeout or "
+            "use a dedicated Inference Endpoint."
+        )
+        return None
+    except requests.ConnectionError as exc:
+        _hf_log.error(
+            "HuggingFace connection error — network unreachable? error=%s "
+            "Falling back to zero embeddings.", exc,
+        )
+        return None
     except Exception as exc:
-        log.warning("HuggingFace API error: %s", exc)
-    return None
+        _hf_log.error(
+            "HuggingFace unexpected error: %s — falling back to zero embeddings", exc,
+        )
+        return None
 
 
 def _load_models() -> None:
     global _dur_model, _pri_model, _le
     if _dur_model is not None:
         return
+    import os
     import joblib
+
     _dur_model = joblib.load(MODELS_DIR / "duration_model.pkl")
     _pri_model = joblib.load(MODELS_DIR / "resource_model.pkl")
     _le        = joblib.load(MODELS_DIR / "label_encoders.pkl")
+
+    hf_key_set = bool(os.getenv("HF_API_KEY", ""))
+    _hf_log.info(
+        "XGBoost models loaded — HF_API_KEY %s — embeddings will be %s",
+        "IS SET" if hf_key_set else "NOT SET",
+        "active (semantic text signal ON)" if hf_key_set
+        else "ZERO-PADDED (text signal OFF — predictions rely on structural features only)",
+    )
 
 
 def _ensure_loaded() -> None:
@@ -272,8 +356,14 @@ def run_ml_only(
     raw_emb = _hf_embed(description)
     if raw_emb and len(raw_emb) == EMB_DIM:
         emb_row = {f"emb_{i}": float(raw_emb[i]) for i in range(EMB_DIM)}
+        _hf_log.debug("Prediction using REAL HuggingFace embeddings — text signal active")
     else:
         emb_row = {f"emb_{i}": 0.0 for i in range(EMB_DIM)}
+        _hf_log.warning(
+            "Prediction using ZERO embeddings — XGBoost text features are all 0.0. "
+            "Set HF_API_KEY env var to enable semantic signal. "
+            "Structural features (cause, corridor, zone, time) still drive the prediction."
+        )
     X = pd.DataFrame([{**struct_row, **emb_row}])[ALL_FEATURES]
 
     duration_min  = float(_dur_model.predict(X)[0])
