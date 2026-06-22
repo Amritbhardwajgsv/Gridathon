@@ -56,6 +56,18 @@ export default function HotspotsPage() {
 
   useEffect(() => { loadData(); }, []);
 
+  function panTo(h: Hotspot) {
+    setSelected(selected?.junction === h.junction ? null : h);
+    const map = mapRef.current;
+    if (!map) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const m = map as any;
+    const pos = { lat: h.lat, lng: h.lng };
+    if (typeof m.setCenter === "function") { m.setCenter(pos); m.setZoom?.(14); }
+    else if (typeof m.flyTo === "function") m.flyTo({ center: pos, zoom: 14 });
+    else if (typeof m.setView === "function") m.setView([h.lat, h.lng], 14);
+  }
+
   useEffect(() => {
     if (initedRef.current || !MAPPLS_KEY) return;
     initedRef.current = true;
@@ -160,12 +172,15 @@ export default function HotspotsPage() {
         </p>
       </div>
 
-      {/* ── Body ─────────────────────────────────────────────────────────── */}
-      <div className="mx-auto flex w-full max-w-7xl flex-1 gap-5 px-6 pb-8" style={{ minHeight: 0 }}>
+      {/* ── Body — concrete height so Mappls SDK gets a real pixel size ── */}
+      <div
+        className="mx-auto flex w-full max-w-7xl gap-5 px-6 pb-6"
+        style={{ height: "calc(100vh - 210px)" }}
+      >
 
         {/* Map card */}
-        <div className="browser-card flex-1 overflow-hidden" style={{ minHeight: 520 }}>
-          <div className="browser-card-header">
+        <div className="browser-card flex-1 overflow-hidden flex flex-col">
+          <div className="browser-card-header shrink-0">
             <span className="browser-dot browser-dot-red" />
             <span className="browser-dot browser-dot-yellow" />
             <span className="browser-dot browser-dot-green" />
@@ -182,7 +197,7 @@ export default function HotspotsPage() {
               ))}
             </span>
           </div>
-          <div id={MAP_ID} style={{ width: "100%", height: "calc(100% - 42px)" }} />
+          <div id={MAP_ID} className="flex-1" />
           {!MAPPLS_KEY && (
             <div className="absolute inset-0 grid place-items-center bg-[#fffaf6] text-[12px] text-[#a88778]">
               Set <code className="mx-1 text-[#f47f5f]">NEXT_PUBLIC_MAPPLS_KEY</code>
@@ -190,8 +205,8 @@ export default function HotspotsPage() {
           )}
         </div>
 
-        {/* Sidebar */}
-        <div className="w-72 shrink-0 flex flex-col gap-3">
+        {/* Sidebar — same height as body container */}
+        <div className="w-72 shrink-0 flex flex-col gap-3 overflow-hidden">
           <div className="browser-card flex-1 overflow-hidden flex flex-col">
             <div className="browser-card-header">
               <span className="browser-dot browser-dot-red" />
@@ -220,7 +235,7 @@ export default function HotspotsPage() {
                 <button
                   key={h.junction}
                   type="button"
-                  onClick={() => setSelected(selected?.junction === h.junction ? null : h)}
+                  onClick={() => panTo(h)}
                   className={`w-full border-b border-[#f2d8ca] px-4 py-3 text-left transition-colors hover:bg-[#fff0e8] ${selected?.junction === h.junction ? "bg-[#fff0e8]" : ""}`}
                 >
                   <div className="flex items-center justify-between gap-2">
