@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import type { MaplsMap } from "@/types/mappls";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "https://gridathon-production.up.railway.app";
@@ -148,7 +149,7 @@ export default function HotspotsPage() {
             {data && <span className="ml-2 text-gray-500">· Multiplier {data.hour_multiplier}×</span>}
           </p>
         </div>
-        <a href="/" className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors">← Back</a>
+        <Link href="/" className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors">← Back</Link>
       </div>
 
       <div className="flex flex-1 overflow-hidden" style={{ minHeight: 0 }}>
