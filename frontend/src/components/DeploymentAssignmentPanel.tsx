@@ -155,10 +155,12 @@ export default function DeploymentAssignmentPanel() {
         field_brief: fieldBrief.trim(),
         status: "issued",
       });
+      const assigned = order.assigned_personnel.length;
       setMessage({
-        text: `${order.order_number} issued to ${order.assigned_personnel.length} officer(s).`,
+        text: `${order.order_number} issued to ${assigned} officer(s).`,
         ok: true,
       });
+      setRequiredCount(String(assigned));
       setFieldBrief("");
       setSelectedIds(new Set());
       await load();
