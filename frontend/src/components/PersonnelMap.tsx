@@ -153,15 +153,16 @@ export default function PersonnelMap({
     const location = point(officer.current_latitude, officer.current_longitude);
     if (!location) return;
     window.setTimeout(() => {
-      const center: [number, number] = [location.lat, location.lng];
+      // v3.0 SDK (Mapbox GL based) uses [lng, lat] for flyTo/setCenter
+      const lngLat: [number, number] = [location.lng, location.lat];
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const m = map as any;
       if (typeof m.flyTo === "function") {
-        m.flyTo({ center, zoom: 16 });
+        m.flyTo({ center: lngLat, zoom: 16 });
       } else if (typeof m.setView === "function") {
-        m.setView(center, 16);
+        m.setView([location.lat, location.lng], 16); // setView is Leaflet-style [lat, lng]
       } else {
-        map.setCenter?.(center);
+        map.setCenter?.(lngLat);
         map.setZoom?.(16);
       }
     }, 100);
@@ -195,7 +196,7 @@ export default function PersonnelMap({
       }
       try {
         const map = new window.mappls.Map(containerId, {
-          center: [BLR.lat, BLR.lng],
+          center: [BLR.lng, BLR.lat], // v3.0 SDK uses [lng, lat] (Mapbox GL format)
           zoom:   12,
         });
         mapRef.current = map;
