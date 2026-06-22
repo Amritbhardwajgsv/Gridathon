@@ -6,6 +6,7 @@ export interface MaplsMap {
   setZoom?:   (z: number) => void;
   setCenter?: (center: [number, number]) => void;
   fitBounds?: (bounds: [[number, number], [number, number]]) => void;
+  on?:        (event: string, cb: () => void) => void;
 }
 
 export interface MaplsMarker {
@@ -16,7 +17,7 @@ export interface MaplsMarker {
 declare global {
   interface Window {
     mappls?: {
-      Map:       new (id: string, options: Record<string, unknown>) => MaplsMap;
+      Map:       new (id: string | HTMLElement | null, options: Record<string, unknown>) => MaplsMap;
       Marker:    new (options: Record<string, unknown>) => MaplsMarker;
       direction: (options: Record<string, unknown>) => void;
     };
