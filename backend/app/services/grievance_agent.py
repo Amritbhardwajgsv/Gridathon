@@ -81,6 +81,7 @@ _ROAD_CLOSURE_WORDS = frozenset({
     "closed", "blocked", "barricade", "diversion", "diverted",
     "road block", "no entry", "shut", "sealed",
 })
+_RUSH_HOURS = frozenset({7, 8, 9, 17, 18, 19, 20})
 
 def _map_zone(z: str | None) -> str:
     return _ZONE.get((z or "").strip().lower(), "Unknown")
@@ -178,6 +179,8 @@ def triage_grievance(payload: CitizenGrievanceCreateRequest) -> tuple[int, str, 
             "hour":                  now.hour,
             "day_of_week":           now.weekday(),
             "month":                 now.month,
+            "is_weekend":            int(now.weekday() >= 5),
+            "rush_hour":             int(now.hour in _RUSH_HOURS),
         }])
         severity     = str(_clf.predict(row)[0])
         duration_min = float(_reg.predict(row)[0])
