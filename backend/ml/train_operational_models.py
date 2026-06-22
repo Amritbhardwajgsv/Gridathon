@@ -210,20 +210,20 @@ _MED_CAUSE  = frozenset({
 
 def impact_level(duration_minutes: float, event_cause: str = "", requires_road_closure: bool = False) -> str:
     score = 0
-    if duration_minutes > 60:  score += 1
-    if duration_minutes > 180: score += 1
+    if duration_minutes > 30:  score += 1
+    if duration_minutes > 90:  score += 1
+    if duration_minutes > 240: score += 1
     if duration_minutes > 480: score += 1
-    if duration_minutes > 960: score += 1
     cause = str(event_cause).lower()
     if cause in _HIGH_CAUSE:
         score += 3
     elif cause in _MED_CAUSE:
-        score += 1
+        score += 2
     if requires_road_closure:
         score += 2
-    if score >= 7: return "Critical"
-    if score >= 5: return "High"
-    if score >= 3: return "Medium"
+    if score >= 6: return "Critical"
+    if score >= 4: return "High"
+    if score >= 2: return "Medium"
     return "Low"
 
 
