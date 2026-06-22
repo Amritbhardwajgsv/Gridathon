@@ -27,7 +27,7 @@ def _call_gemini(prompt: str) -> str:
         return ""
     client = genai.Client(api_key=key)
     response = client.models.generate_content(
-        model="gemini-2.0-flash-lite",
+        model="gemini-2.5-flash-lite",
         contents=prompt,
     )
     text = (response.text or "").strip()
