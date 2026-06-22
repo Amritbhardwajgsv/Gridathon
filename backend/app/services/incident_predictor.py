@@ -236,9 +236,13 @@ def llm_firewall(description: str) -> tuple[bool, str]:
             response = client.models.generate_content(
                 model    = "gemini-2.5-flash-lite",
                 contents = (
-                    "Is the following description about a road traffic incident "
-                    "(breakdown, accident, congestion, tree fall, signal failure, flooding, etc.)? "
-                    "Reply with exactly one word: YES or NO.\n\n"
+                    "You are a spam filter for a Bengaluru traffic reporting app. "
+                    "Citizens report issues like traffic jams, accidents, potholes, signal failures, "
+                    "road blocks, vehicle breakdowns, flooding, illegal parking, or anything affecting "
+                    "roads and public movement — including vague or informal descriptions in any language. "
+                    "Reply ONLY with YES if this could plausibly be a road/traffic/vehicle/public-safety "
+                    "related complaint (even if vague or brief). "
+                    "Reply NO only if it is clearly unrelated spam (e.g. food, shopping, personal disputes).\n\n"
                     f"Description: {description[:500]}"
                 ),
             )
@@ -248,12 +252,10 @@ def llm_firewall(description: str) -> tuple[bool, str]:
             future = ex.submit(_call_gemini)
             answer = future.result(timeout=_GEMINI_TIMEOUT_S)
 
-        if answer.startswith("YES"):
-            return True, "Gemini validated"
         if answer.startswith("NO"):
             return False, "Gemini determined the description is not a traffic incident."
-        # Ambiguous response — pass through
-        return True, "Gemini response unclear — passed by keyword match"
+        # YES or any other response — pass through (default to accept)
+        return True, "Gemini validated"
     except concurrent.futures.TimeoutError:
         # Gemini slow or unavailable — don't penalise the citizen
         return True, "Validation timed out — passed by keyword match"
