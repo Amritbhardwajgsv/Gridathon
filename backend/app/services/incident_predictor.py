@@ -280,7 +280,7 @@ def llm_firewall(description: str) -> tuple[bool, str]:
 
         def _call_gemini() -> str:
             response = client.models.generate_content(
-                model    = "gemini-2.0-flash-lite",
+                model    = "gemini-2.0-flash-lite-001",
                 contents = (
                     "Is the following description about a road traffic incident "
                     "(breakdown, accident, congestion, tree fall, signal failure, flooding, etc.)? "
