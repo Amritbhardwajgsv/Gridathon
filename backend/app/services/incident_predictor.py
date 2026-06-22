@@ -50,7 +50,14 @@ EVENT_CAUSE_KEYWORDS: dict[str, list[str]] = {
     "vehicle_breakdown": ["breakdown", "stalled", "engine failure", "broken down",
                           "puncture", "flat tyre", "flat tire", "battery dead"],
     "tree_fall":         ["tree", "fallen tree", "tree down", "tree fall", "tree branch"],
-    "accident":          ["accident", "collision", "crash", "hit and run", "knocked"],
+    "accident":          [
+        "accident", "collision", "crash", "hit and run", "knocked",
+        "toppled", "overturned", "rollover", "skid", "rammed",
+        "dies", "died", "dead", "death", "fatality", "killed", "killing",
+        "injured", "serious injury", "critical condition",
+        "fire", "explosion", "ambulance", "emergency",
+        "outbreak", "stampede",
+    ],
     "road_work":         ["road work", "construction", "digging", "repair", "maintenance"],
     "signal_failure":    ["signal", "traffic light", "traffic signal", "signal failure"],
     "flooding":          ["flood", "water logging", "waterlogging", "rain", "submerged"],
@@ -189,9 +196,9 @@ _SEVERE_CAUSES = frozenset({"accident", "vip_movement"})
 
 def _get_urgency(priority_pred: int, duration_min: float, road_closure: bool, event_cause: str = "others") -> str:
     severe = event_cause in _SEVERE_CAUSES
-    if (priority_pred == 1 and duration_min > 120) or (severe and duration_min > 60): return "CRITICAL"
-    if priority_pred == 1 or severe or (road_closure and duration_min > 60):          return "HIGH"
-    if duration_min > 120:                                                             return "MEDIUM"
+    if priority_pred == 1 or severe:                       return "CRITICAL"
+    if road_closure and duration_min > 60:                 return "HIGH"
+    if duration_min > 120:                                 return "MEDIUM"
     return "LOW"
 
 
