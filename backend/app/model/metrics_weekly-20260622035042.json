@@ -1,0 +1,40 @@
+{
+  "source_rows": 2762,
+  "duration_mae_log": 0.9034099385378778,
+  "duration_r2_log": 0.13988975060087605,
+  "impact_accuracy": 0.8788426763110307,
+  "impact_f1_macro": 0.5207169718318241,
+  "impact_f1_cv_std": 0.05295073586467754,
+  "impact_per_class": {
+    "Low": {
+      "precision": 0.953,
+      "recall": 0.944,
+      "f1": 0.949,
+      "support": 450
+    },
+    "Medium": {
+      "precision": 0.675,
+      "recall": 0.635,
+      "f1": 0.655,
+      "support": 85
+    },
+    "High": {
+      "precision": 0.24,
+      "recall": 0.375,
+      "f1": 0.293,
+      "support": 16
+    },
+    "Critical": {
+      "precision": 0.5,
+      "recall": 0.5,
+      "f1": 0.5,
+      "support": 2
+    }
+  },
+  "label_distribution": {
+    "Low": 2246,
+    "Medium": 424,
+    "High": 81,
+    "Critical": 11
+  }
+}
