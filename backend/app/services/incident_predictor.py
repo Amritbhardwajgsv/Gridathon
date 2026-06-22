@@ -76,7 +76,7 @@ _pri_model: Any = None
 _le: dict       = {}
 
 _HF_MODEL   = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-_HF_API_URL = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{_HF_MODEL}"
+_HF_API_URL = f"https://router.huggingface.co/hf-inference/pipeline/feature-extraction/{_HF_MODEL}"
 
 _hf_log = logging.getLogger("drishti.hf_embed")
 
@@ -89,6 +89,7 @@ def _hf_status() -> dict:
         "key_set":  bool(key),
         "model":    _HF_MODEL,
         "emb_dim":  EMB_DIM,
+        "api_url":  _HF_API_URL,
         "status":   "active" if key else "degraded — zero embeddings",
     }
 
@@ -280,7 +281,7 @@ def llm_firewall(description: str) -> tuple[bool, str]:
 
         def _call_gemini() -> str:
             response = client.models.generate_content(
-                model    = "gemini-2.0-flash-lite",
+                model    = "gemini-2.0-flash-lite-001",
                 contents = (
                     "Is the following description about a road traffic incident "
                     "(breakdown, accident, congestion, tree fall, signal failure, flooding, etc.)? "
