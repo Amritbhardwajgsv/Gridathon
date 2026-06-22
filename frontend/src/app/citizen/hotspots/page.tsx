@@ -42,16 +42,20 @@ export default function HotspotsPage() {
   const mapRef = useRef<MaplsMap | null>(null);
   const initedRef = useRef(false);
   const [data, setData] = useState<HotspotData | null>(null);
+  const [fetchError, setFetchError] = useState(false);
   const [selected, setSelected] = useState<Hotspot | null>(null);
   const [mapReady, setMapReady] = useState(false);
 
-  // Fetch hotspot data
-  useEffect(() => {
+  function loadData() {
+    setFetchError(false);
     fetch(`${API}/citizen/incidents/hotspots`)
-      .then((r) => r.json())
-      .then(setData)
-      .catch(() => {});
-  }, []);
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then((d: HotspotData) => { if (Array.isArray(d.hotspots)) setData(d); else throw new Error(); })
+      .catch(() => setFetchError(true));
+  }
+
+  // Fetch hotspot data
+  useEffect(() => { loadData(); }, []);
 
   // Init map (runs once after mount — container div is guaranteed to exist)
   useEffect(() => {
@@ -184,11 +188,17 @@ export default function HotspotsPage() {
           <div className="p-3 border-b border-[#2a2a2a] text-xs text-gray-400 uppercase tracking-wide">
             Top Risk Junctions
           </div>
-          {!data && (
+          {!data && !fetchError && (
             <div className="p-4 text-xs text-gray-500 animate-pulse">Loading hotspot data…</div>
           )}
+          {fetchError && (
+            <div className="p-4 text-xs text-red-400 space-y-2">
+              <div>Failed to load hotspot data.</div>
+              <button type="button" onClick={loadData} className="text-[#f5c518] hover:underline">Retry ↺</button>
+            </div>
+          )}
           {data?.hotspots.length === 0 && (
-            <div className="p-4 text-xs text-gray-500">No hotspot data available</div>
+            <div className="p-4 text-xs text-gray-500">No hotspot data available.</div>
           )}
           {data?.hotspots.slice(0, 15).map((h) => (
             <div
