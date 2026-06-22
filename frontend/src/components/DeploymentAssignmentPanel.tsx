@@ -51,6 +51,7 @@ export default function DeploymentAssignmentPanel() {
   const [selectedIds, setSelectedIds]           = useState<Set<string>>(new Set());
   const [rankFilter, setRankFilter]             = useState("all");
   const [searchQuery, setSearchQuery]           = useState("");
+  const [complaintSearch, setComplaintSearch]   = useState("");
   const [chatOrderId, setChatOrderId]           = useState<string | null>(null);
 
   const currentUser = getCurrentUser();
@@ -199,21 +200,51 @@ export default function DeploymentAssignmentPanel() {
           {/* ── Left: complaint selector + brief ─────────────────── */}
           <div className="space-y-4">
             <div>
-              <label className="section-kicker mb-2 block" htmlFor="grievance-select">
-                Complaint Report
-              </label>
+              <label className="section-kicker mb-2 block">Complaint Report</label>
+              {/* Search input */}
+              <div className="relative mb-1">
+                <input
+                  className="w-full rounded border border-[#252b35] bg-[#10141b] px-3 py-2 pl-8 text-[12px] text-[#dce2ea] outline-none focus:border-[#e8a034]/50 placeholder:text-[#3d4754]"
+                  placeholder="Search by ID, location, corridor or severity…"
+                  value={complaintSearch}
+                  onChange={(e) => setComplaintSearch(e.target.value)}
+                />
+                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[#3d4754]">
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" /></svg>
+                </span>
+              </div>
               <select
                 className="w-full rounded border border-[#252b35] bg-[#10141b] px-3 py-2 text-[13px] text-[#dce2ea] outline-none focus:border-[#e8a034]/50"
                 id="grievance-select"
                 onChange={(e) => { setSelectedGrievanceId(e.target.value); setSelectedIds(new Set()); }}
                 value={selectedGrievanceId}
+                size={Math.min(6, grievances.filter(g => {
+                  if (!complaintSearch.trim()) return true;
+                  const q = complaintSearch.toLowerCase();
+                  return (g.tracking_id + g.location_text + (g.corridor ?? "") + g.severity + (g.complaint_type ?? "")).toLowerCase().includes(q);
+                }).length) || 1}
               >
-                {grievances.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.tracking_id} · {item.location_text} · {item.severity}
-                  </option>
-                ))}
+                {grievances
+                  .filter((g) => {
+                    if (!complaintSearch.trim()) return true;
+                    const q = complaintSearch.toLowerCase();
+                    return (g.tracking_id + g.location_text + (g.corridor ?? "") + g.severity + (g.complaint_type ?? "")).toLowerCase().includes(q);
+                  })
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.tracking_id} · {item.location_text} · {item.severity}
+                    </option>
+                  ))}
               </select>
+              {complaintSearch.trim() && (
+                <div className="mt-1 text-[10px] text-[#4a5568]">
+                  {grievances.filter((g) => {
+                    const q = complaintSearch.toLowerCase();
+                    return (g.tracking_id + g.location_text + (g.corridor ?? "") + g.severity + (g.complaint_type ?? "")).toLowerCase().includes(q);
+                  }).length} match(es)
+                  <button className="ml-2 text-[#e8a034] hover:underline" onClick={() => setComplaintSearch("")}>Clear</button>
+                </div>
+              )}
             </div>
 
             {selectedGrievance ? (
