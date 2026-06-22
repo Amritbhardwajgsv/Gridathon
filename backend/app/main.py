@@ -814,6 +814,7 @@ async def deployment_chat_ws(
         if candidate
     ]
     if not candidate_tokens:
+        await websocket.accept()
         await websocket.close(code=4001, reason="Unauthorized")
         return
 
@@ -827,6 +828,7 @@ async def deployment_chat_ws(
 
     if user is None:
         logger.warning("Chat WS authentication rejected: room=%s", deployment_id)
+        await websocket.accept()
         await websocket.close(code=4001, reason="Unauthorized")
         return
 
