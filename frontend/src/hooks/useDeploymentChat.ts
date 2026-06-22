@@ -34,6 +34,7 @@ export function useDeploymentChat(deploymentId: string | null) {
 
   const wsRef      = useRef<WebSocket | null>(null);
   const retryRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pingRef    = useRef<ReturnType<typeof setInterval> | null>(null);
   const mountedRef = useRef(true);
   const retryCount = useRef(0);
 
@@ -49,6 +50,10 @@ export function useDeploymentChat(deploymentId: string | null) {
       if (!mountedRef.current) return;
       retryCount.current = 0;
       setState(s => ({ ...s, connected: true, error: null }));
+      // Keep Render's proxy alive — it kills idle WS after ~55s
+      pingRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" }));
+      }, 30_000);
     };
 
     ws.onmessage = (evt) => {
@@ -72,6 +77,7 @@ export function useDeploymentChat(deploymentId: string | null) {
 
     ws.onclose = () => {
       if (!mountedRef.current) return;
+      if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null; }
       setState(s => ({ ...s, connected: false }));
       const delay = Math.min(1000 * 2 ** retryCount.current, 16_000);
       retryCount.current += 1;
@@ -103,6 +109,7 @@ export function useDeploymentChat(deploymentId: string | null) {
     return () => {
       mountedRef.current = false;
       if (retryRef.current) clearTimeout(retryRef.current);
+      if (pingRef.current) clearInterval(pingRef.current);
       wsRef.current?.close();
       wsRef.current = null;
     };
