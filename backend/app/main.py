@@ -6,7 +6,7 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
@@ -749,6 +749,27 @@ def create_citizen_grievance(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not submit grievance",
         ) from exc
+
+
+@app.post("/citizen/photos/upload", tags=["citizen"])
+async def upload_incident_photo(
+    tracking_id: str,
+    file: UploadFile = File(...),
+) -> dict:
+    """Upload a photo for an incident — returns the S3 URL."""
+    from app.services.s3_service import upload_incident_photo as s3_upload, is_configured
+    if not is_configured():
+        raise HTTPException(status_code=503, detail="Photo uploads not configured")
+    content_type = file.content_type or "image/jpeg"
+    data = await file.read()
+    try:
+        url = s3_upload(data, content_type, tracking_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("S3 upload failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Upload failed") from exc
+    return {"url": url}
 
 
 @app.get("/citizen/incidents/recent", tags=["citizen"])

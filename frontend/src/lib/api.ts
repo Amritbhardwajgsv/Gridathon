@@ -43,6 +43,20 @@ export async function submitCitizenGrievance(
   return response.data;
 }
 
+export async function uploadIncidentPhoto(
+  trackingId: string,
+  file: File
+): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await api.post<{ url: string }>(
+    `/citizen/photos/upload?tracking_id=${encodeURIComponent(trackingId)}`,
+    form,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
+  return response.data.url;
+}
+
 export async function trackCitizenGrievance(
   trackingId: string
 ): Promise<CitizenGrievance> {

@@ -35,7 +35,7 @@ _EVALUATION_MSG = json.dumps({
 _RETURNING = """
     id, tracking_id, complaint_type, severity, location_text,
     zone, corridor, latitude, longitude, description, status,
-    agent_priority_score, agent_recommendation, created_at
+    agent_priority_score, agent_recommendation, photo_url, created_at
 """
 
 
@@ -126,12 +126,12 @@ class GrievanceRepository:
                     insert into citizen_grievances (
                         tracking_id, reporter_name, reporter_phone, reporter_email,
                         complaint_type, severity, location_text, zone, corridor,
-                        latitude, longitude, description, status,
+                        latitude, longitude, description, status, photo_url,
                         agent_priority_score, agent_recommendation, nlp_extracted_at
                     ) values (
                         %(tracking_id)s, %(reporter_name)s, %(reporter_phone)s, %(reporter_email)s,
                         %(complaint_type)s, 'Low', %(location_text)s, %(zone)s, %(corridor)s,
-                        %(latitude)s, %(longitude)s, %(description)s, 'evaluating',
+                        %(latitude)s, %(longitude)s, %(description)s, 'evaluating', %(photo_url)s,
                         0, %(agent_recommendation)s, now()
                     ) returning {_RETURNING}
                     """,

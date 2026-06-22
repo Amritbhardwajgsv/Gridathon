@@ -18,7 +18,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { highSignalLocations } from "@/lib/bengaluru";
-import { submitCitizenGrievance } from "@/lib/api";
+import { submitCitizenGrievance, uploadIncidentPhoto } from "@/lib/api";
 import type { CitizenGrievance, CitizenGrievancePayload } from "@/types/prediction";
 
 type FormState = {
@@ -47,6 +47,8 @@ export default function CitizenGrievancePage() {
   const [locMsg,      setLocMsg]      = useState("");
   const [submitting,  setSubmitting]  = useState(false);
   const [isLocating,  setIsLocating]  = useState(false);
+  const [photoFile,   setPhotoFile]   = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   const completion = useMemo(() => {
     const fields: Array<keyof FormState> = ["location_text", "description"];
@@ -117,10 +119,18 @@ export default function CitizenGrievancePage() {
 
     try {
       const res = await submitCitizenGrievance(payload);
+      // Upload photo after getting tracking_id — best effort, don't block on failure
+      if (photoFile) {
+        try {
+          await uploadIncidentPhoto(res.tracking_id, photoFile);
+        } catch { /* photo upload failed silently */ }
+      }
       setResult(res);
       setForm(initial);
       setErrors({});
       setLocMsg("");
+      setPhotoFile(null);
+      setPhotoPreview(null);
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       const detail = (err as { response?: { data?: { detail?: { reason?: string; code?: string } | string } } })
@@ -296,6 +306,44 @@ export default function CitizenGrievancePage() {
                     value={form.reporter_email}
                     onChange={(e) => set("reporter_email", e.target.value)}
                   />
+                </F>
+
+                <F label="Photo (optional)" hint="Attach a photo of the incident — max 10 MB, jpg/png/webp.">
+                  <label className={`flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed px-4 py-3 transition ${photoFile ? "border-[#FFE600]/60 bg-[#FFE600]/5" : "border-[#252535] hover:border-[#FFE600]/40"} ${submitting ? "opacity-50 pointer-events-none" : ""}`}>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      disabled={submitting}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] ?? null;
+                        setPhotoFile(f);
+                        if (f) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setPhotoPreview(ev.target?.result as string);
+                          reader.readAsDataURL(f);
+                        } else {
+                          setPhotoPreview(null);
+                        }
+                      }}
+                    />
+                    {photoPreview ? (
+                      <div className="flex items-center gap-3 w-full">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={photoPreview} alt="preview" className="h-14 w-14 rounded-lg object-cover shrink-0" />
+                        <div className="min-w-0">
+                          <p className="truncate text-[12px] font-semibold text-[#F0F0F8]">{photoFile?.name}</p>
+                          <p className="text-[10px] text-[#888]">{photoFile ? (photoFile.size / 1024).toFixed(0) + " KB" : ""}</p>
+                        </div>
+                        <button type="button" className="ml-auto text-[#888] hover:text-[#ef4444] text-[11px]"
+                          onClick={(e) => { e.preventDefault(); setPhotoFile(null); setPhotoPreview(null); }}>
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-[12px] text-[#888]">Click to attach a photo</span>
+                    )}
+                  </label>
                 </F>
 
                 <div className="hidden">
