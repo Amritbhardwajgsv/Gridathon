@@ -355,13 +355,19 @@ export default function CitizenGrievancePage() {
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <div className="rounded border-2 border-[#252535] bg-[#08080F] p-3">
                       <div className="text-[9px] font-black uppercase tracking-[0.18em] text-[#444455]">AI Severity</div>
-                      <div className={`mt-1 text-[13px] font-black uppercase ${result.severity === "Critical" ? "text-[#EF4444]" : result.severity === "High" ? "text-[#F59E0B]" : result.severity === "Medium" ? "text-[#3B82F6]" : "text-[#10B981]"}`}>
-                        {result.severity}
-                      </div>
+                      {result.status === "evaluating" ? (
+                        <div className="mt-1 text-[13px] font-black uppercase text-[#F59E0B]">Awaiting</div>
+                      ) : (
+                        <div className={`mt-1 text-[13px] font-black uppercase ${result.severity === "Critical" ? "text-[#EF4444]" : result.severity === "High" ? "text-[#F59E0B]" : result.severity === "Medium" ? "text-[#3B82F6]" : "text-[#10B981]"}`}>
+                          {result.severity}
+                        </div>
+                      )}
                     </div>
                     <div className="rounded border-2 border-[#252535] bg-[#08080F] p-3">
                       <div className="text-[9px] font-black uppercase tracking-[0.18em] text-[#444455]">Status</div>
-                      <div className="mt-1 text-[12px] font-bold text-[#F0F0F8]">{result.status}</div>
+                      <div className="mt-1 text-[12px] font-bold text-[#F0F0F8]">
+                        {result.status === "evaluating" ? "Evaluating…" : result.status}
+                      </div>
                     </div>
                   </div>
                   <div className="mt-4 flex flex-col gap-2">
