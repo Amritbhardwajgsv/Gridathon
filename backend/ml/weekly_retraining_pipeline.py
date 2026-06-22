@@ -104,30 +104,30 @@ def impact_level(
 ) -> str:
     """Composite severity label: duration + cause type + road closure.
 
-    Old approach used pure duration quantile buckets, which made "Critical"
-    mean "ticket sat open for months" rather than "high disruption". This
-    composite score correlates with actual traffic impact.
-
     Score breakdown (max 9):
-      Duration  0-4 pts  (>60 / >180 / >480 / >960 min)
-      Cause     0-3 pts  (accident/road/VIP=3, tree/flood/construction=1)
+      Duration  0-4 pts  (>30 / >90 / >240 / >480 min)
+      Cause     0-3 pts  (accident/road/VIP=3, tree/flood/construction/event=2)
       Closure   0-2 pts  (road closure active)
+
+    Thresholds are calibrated so that on the Astram dataset (capped at 1440 min)
+    roughly 50% Low, 30% Medium, 15% High, 5% Critical — enough samples
+    in each class for class_weight='balanced' to be effective.
     """
     score = 0
-    if duration_minutes > 60:  score += 1
-    if duration_minutes > 180: score += 1
+    if duration_minutes > 30:  score += 1
+    if duration_minutes > 90:  score += 1
+    if duration_minutes > 240: score += 1
     if duration_minutes > 480: score += 1
-    if duration_minutes > 960: score += 1
     cause = str(event_cause).lower()
     if cause in _HIGH_CAUSE:
         score += 3
     elif cause in _MED_CAUSE:
-        score += 1
+        score += 2
     if requires_road_closure:
         score += 2
-    if score >= 7: return "Critical"
-    if score >= 5: return "High"
-    if score >= 3: return "Medium"
+    if score >= 6: return "Critical"
+    if score >= 4: return "High"
+    if score >= 2: return "Medium"
     return "Low"
 
 
@@ -418,6 +418,7 @@ def save_artifacts(result: dict[str, Any], output_dir: Path) -> dict[str, str]:
     output_dir.mkdir(parents=True, exist_ok=True)
     model_version = datetime.now(timezone.utc).strftime("weekly-%Y%m%d%H%M%S")
 
+    # Versioned copies — kept for rollback history
     duration_path         = output_dir / f"duration_model_{model_version}.pkl"
     impact_path           = output_dir / f"impact_model_{model_version}.pkl"
     metrics_path          = output_dir / f"metrics_{model_version}.json"
@@ -429,6 +430,16 @@ def save_artifacts(result: dict[str, Any], output_dir: Path) -> dict[str, str]:
     metrics_path.write_text(json.dumps(result["metrics"], indent=2), encoding="utf-8")
     duration_columns_path.write_text(json.dumps(MODEL_FEATURES), encoding="utf-8")
     impact_columns_path.write_text(json.dumps(MODEL_FEATURES), encoding="utf-8")
+
+    # Unversioned copies — these are what production loads at runtime
+    joblib.dump(result["duration_model"], output_dir / "duration_model.pkl")
+    joblib.dump(result["impact_model"],   output_dir / "impact_model.pkl")
+    (output_dir / "duration_feature_columns.json").write_text(
+        json.dumps(MODEL_FEATURES), encoding="utf-8"
+    )
+    (output_dir / "impact_feature_columns.json").write_text(
+        json.dumps(MODEL_FEATURES), encoding="utf-8"
+    )
 
     logger.info("Artifacts saved to %s (version=%s)", output_dir, model_version)
     return {
