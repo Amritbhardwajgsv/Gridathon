@@ -218,6 +218,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     event_queue.init(db_url)
     event_queue.start()
     event_queue.replay_pending()
+    try:
+        prediction_service.load_models()
+        resource_recommendation_service.load_models()
+        logger.info("ML models loaded at startup")
+    except Exception as exc:
+        logger.warning("ML model load at startup failed (non-fatal): %s", exc)
     logger.info("DRISHTI backend starting — event queue + connection pool ready")
     yield
     event_queue.stop()
