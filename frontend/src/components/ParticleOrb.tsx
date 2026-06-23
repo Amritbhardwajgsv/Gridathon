@@ -24,13 +24,14 @@ export default function ParticleOrb({ className }: { className?: string }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const rawCtx = canvas.getContext("2d");
+    if (!rawCtx) return;
+    const ctx: CanvasRenderingContext2D = rawCtx;
 
     const dpr = window.devicePixelRatio || 1;
 
     function resize() {
-      if (!canvas || !ctx) return;
+      if (!canvas) return;
       const cw = canvas.clientWidth;
       const ch = canvas.clientHeight;
       canvas.width = cw * dpr;
