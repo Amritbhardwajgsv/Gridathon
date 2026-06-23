@@ -30,6 +30,7 @@ export const metadata: Metadata = {
 };
 
 import DescriptionPipelinePreview from "@/components/DescriptionPipelinePreview";
+import ParticleOrb from "@/components/ParticleOrb";
 import RecentIncidentsFeed from "@/components/RecentIncidentsFeed";
 import ScrollAnimationsProvider from "@/components/ScrollAnimationsProvider";
 import DrishtiChatbot from "@/components/DrishtiChatbot";
@@ -253,6 +254,48 @@ export default function HomePage() {
                 <img alt="Television news clipping about Bengaluru being the second most congested city globally" className="max-h-[620px] w-full object-contain" loading="lazy" src="/news/bengaluru-congestion-broadcast.png" />
               </div>
             </article>
+          </div>
+        </div>
+      </section>
+
+      {/* ── AI Intelligence visual ───────────────────────────────────────────── */}
+      <section className="relative border-b-2 border-[#252535] overflow-hidden px-6 py-20">
+        {/* subtle radial bg */}
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(180,140,255,0.06)_0%,transparent_65%)]" />
+
+        <div className="relative mx-auto flex max-w-7xl flex-col items-center gap-10 lg:flex-row lg:items-center lg:gap-16">
+          {/* Text side */}
+          <div className="flex-1 text-center lg:text-left">
+            <div className="section-kicker mb-3 text-[#A78BFA]">+ Intelligence Core</div>
+            <h2 className="text-[32px] font-black uppercase leading-[1.0] tracking-[-0.01em] text-[#F0F0F8] md:text-[40px]">
+              Every report feeds<br />
+              <span className="text-[#A78BFA]">the neural engine.</span>
+            </h2>
+            <p className="mt-5 max-w-md text-[14px] leading-7 text-[#8888A0] lg:max-w-none">
+              Citizen descriptions orbit a central AI core — each one parsed,
+              structured, and classified in real time. The model grows smarter
+              with every Bengaluru incident it processes.
+            </p>
+            <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+              {[
+                { v: "NLP",    l: "Field Extraction"    },
+                { v: "ML",     l: "Impact Scoring"      },
+                { v: "RT",     l: "Real-Time Inference" },
+              ].map((s) => (
+                <div
+                  key={s.l}
+                  className="rounded border-2 border-[#A78BFA]/20 bg-[#A78BFA]/5 px-4 py-3"
+                >
+                  <div className="font-mono text-[22px] font-black text-[#A78BFA]">{s.v}</div>
+                  <div className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-[#8888A0]">{s.l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Orb */}
+          <div className="relative flex h-[300px] w-full max-w-[500px] shrink-0 items-center justify-center md:h-[380px] lg:w-[480px]">
+            <ParticleOrb className="h-full w-full" />
           </div>
         </div>
       </section>
