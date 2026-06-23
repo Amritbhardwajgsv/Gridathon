@@ -620,6 +620,52 @@ export default function HomePage() {
                   "query-input": "required name=search_term_string",
                 },
               },
+              {
+                "@type": "FAQPage",
+                "@id": "https://drishti-ex4s.onrender.com/#faq",
+                mainEntity: [
+                  {
+                    "@type": "Question",
+                    name: "How do I report a traffic incident in Bengaluru?",
+                    acceptedAnswer: {
+                      "@type": "Answer",
+                      text: "Visit drishti-ex4s.onrender.com and click 'Report Incident'. Describe the traffic problem in plain language — no technical form-filling needed. DRISHTI's AI automatically extracts the cause, vehicle type, road impact, and urgency from your description and routes it to Bengaluru Police for action.",
+                    },
+                  },
+                  {
+                    "@type": "Question",
+                    name: "How do I track my Bengaluru traffic complaint?",
+                    acceptedAnswer: {
+                      "@type": "Answer",
+                      text: "After submitting your incident report on DRISHTI, you receive a unique tracking token. Go to the 'Track Complaint' page and enter your token to see real-time status updates including assignment, field officer dispatch, and resolution.",
+                    },
+                  },
+                  {
+                    "@type": "Question",
+                    name: "What is DRISHTI by Bengaluru Traffic Police?",
+                    acceptedAnswer: {
+                      "@type": "Answer",
+                      text: "DRISHTI (Dynamic Resource Intelligence System for Handling Traffic Incidents) is an AI-powered traffic operations platform built for Bengaluru Police. It uses NLP to extract structured incident data from citizen descriptions, predicts traffic impact using ML models, and dispatches the nearest available field officers via GPS.",
+                    },
+                  },
+                  {
+                    "@type": "Question",
+                    name: "What types of traffic incidents can I report?",
+                    acceptedAnswer: {
+                      "@type": "Answer",
+                      text: "You can report any traffic problem in Bengaluru including vehicle accidents and breakdowns, illegal parking blocking junctions or bus stops, road closures, event-related congestion (concerts, rallies, marathons), and traffic signal failures.",
+                    },
+                  },
+                  {
+                    "@type": "Question",
+                    name: "Do I need to create an account to report a traffic issue?",
+                    acceptedAnswer: {
+                      "@type": "Answer",
+                      text: "No. Any citizen can submit a traffic incident report on DRISHTI without logging in or creating an account. Simply describe the problem and submit — you will receive a tracking token to follow the status of your complaint.",
+                    },
+                  },
+                ],
+              },
             ],
           }),
         }}
