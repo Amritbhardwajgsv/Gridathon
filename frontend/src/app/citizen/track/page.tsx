@@ -140,7 +140,7 @@ export default function CitizenTrackPage() {
         </div>
 
         {/* Search bar */}
-        <form className="flex gap-3" onSubmit={handleSubmit}>
+        <form className="flex flex-col gap-3 sm:flex-row" onSubmit={handleSubmit}>
           <input
             className="field-dark flex-1 font-mono text-[13px] uppercase tracking-widest"
             disabled={loading}
@@ -230,7 +230,7 @@ export default function CitizenTrackPage() {
             </div>
 
             {/* Data cards */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <DataCard icon={<Clock className="h-4 w-4 text-[#FFE600]" />} label="Status" value={humanize(result.status)} />
               <DataCard icon={<ShieldCheck className="h-4 w-4 text-[#A78BFA]" />} label="Priority" value={`${result.agent_priority_score ?? "--"}/100`} />
               <DataCard icon={<MapPinned className="h-4 w-4 text-[#22D3EE]" />} label="Corridor" value={result.corridor || "Mapping…"} />

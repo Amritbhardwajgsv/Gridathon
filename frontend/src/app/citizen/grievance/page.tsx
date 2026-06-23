@@ -8,11 +8,13 @@ import {
   Crosshair,
   Loader2,
   MapPin,
+  Menu,
   Radio,
   Send,
   Shield,
   Siren,
   Wifi,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -40,6 +42,7 @@ const initial: FormState = {
 };
 
 export default function CitizenGrievancePage() {
+  const [menuOpen,    setMenuOpen]    = useState(false);
   const [form,        setForm]        = useState<FormState>(initial);
   const [errors,      setErrors]      = useState<Partial<FormState>>({});
   const [result,      setResult]      = useState<CitizenGrievance | null>(null);
@@ -164,7 +167,8 @@ export default function CitizenGrievancePage() {
               <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#444455]">Citizen Incident Portal</div>
             </div>
           </Link>
-          <div className="flex items-center gap-3">
+          {/* Desktop links */}
+          <div className="hidden items-center gap-3 md:flex">
             <Link className="px-3 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#8888A0] transition hover:text-[#F0F0F8]" href="/citizen/predict">
               Get Estimate
             </Link>
@@ -175,7 +179,34 @@ export default function CitizenGrievancePage() {
               Police Login
             </Link>
           </div>
+          {/* Mobile hamburger */}
+          <button
+            className="flex h-9 w-9 items-center justify-center rounded border-2 border-[#252535] text-[#8888A0] transition hover:border-[#FFE600] hover:text-[#FFE600] md:hidden"
+            onClick={() => setMenuOpen((o) => !o)}
+            type="button"
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+          >
+            {menuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+          </button>
         </div>
+        {/* Mobile menu */}
+        {menuOpen && (
+          <div className="border-t-2 border-[#252535] bg-[#08080F] px-6 pb-4 pt-3 md:hidden">
+            <div className="flex flex-col gap-0.5">
+              <Link className="rounded px-3 py-3 text-[13px] font-bold uppercase tracking-[0.06em] text-[#8888A0] hover:bg-[#0F0F1A] hover:text-[#F0F0F8]" href="/citizen/predict" onClick={() => setMenuOpen(false)}>
+                Get Estimate
+              </Link>
+              <Link className="rounded px-3 py-3 text-[13px] font-bold uppercase tracking-[0.06em] text-[#8888A0] hover:bg-[#0F0F1A] hover:text-[#F0F0F8]" href="/citizen/track" onClick={() => setMenuOpen(false)}>
+                Track Complaint
+              </Link>
+              <div className="mt-2 border-t-2 border-[#252535] pt-3">
+                <Link className="btn-primary w-full justify-center py-3 text-[13px]" href="/login" onClick={() => setMenuOpen(false)}>
+                  Police Login <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Hero */}
