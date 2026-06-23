@@ -53,7 +53,7 @@ const ROLE_BG: Record<UserRole, string> = {
   viewer:   "bg-[#A78BFA]/10 border-[#A78BFA]/25",
 };
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen = false, onClose }: { isOpen?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const router   = useRouter();
   const user     = getCurrentUser();
@@ -88,7 +88,7 @@ export default function Sidebar() {
   }, [search, allPersonnel]);
 
   return (
-    <aside className="sticky top-11 flex h-[calc(100vh-44px)] w-[200px] shrink-0 flex-col border-r-2 border-[#252535] bg-[#08080F]">
+    <aside className={`fixed top-11 z-50 flex h-[calc(100vh-44px)] w-[200px] shrink-0 flex-col border-r-2 border-[#252535] bg-[#08080F] transition-transform duration-200 lg:sticky lg:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"}`}>
 
       {/* User card */}
       <div className="border-b-2 border-[#252535] p-3">
@@ -123,6 +123,7 @@ export default function Sidebar() {
                       }`}
                       href={item.href}
                       key={item.href}
+                      onClick={onClose}
                     >
                       <Icon className={`h-3.5 w-3.5 shrink-0 ${active ? "text-[#FFE600]" : "text-[#252535]"}`} />
                       <span className="min-w-0 flex-1 truncate">{item.label}</span>

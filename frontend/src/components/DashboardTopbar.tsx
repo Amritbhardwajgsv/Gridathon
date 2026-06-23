@@ -1,6 +1,6 @@
 "use client";
 
-import { Radio } from "lucide-react";
+import { Menu, Radio } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -27,7 +27,7 @@ const ROLE_COLOR: Record<UserRole, string> = {
   viewer:   "text-[#A78BFA]",
 };
 
-export default function DashboardTopbar() {
+export default function DashboardTopbar({ onToggleSidebar }: { onToggleSidebar?: () => void }) {
   const pathname = usePathname();
   const user     = getCurrentUser();
   const [time, setTime] = useState("");
@@ -53,10 +53,20 @@ export default function DashboardTopbar() {
   const roleColor = user?.role ? (ROLE_COLOR[user.role] ?? "text-[#FFE600]") : "text-[#FFE600]";
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-40 flex h-11 items-center border-b-2 border-[#252535] bg-[#08080F]/97 backdrop-blur-md px-4">
+    <header className="fixed left-0 right-0 top-0 z-50 flex h-11 items-center border-b-2 border-[#252535] bg-[#08080F]/97 backdrop-blur-md px-4">
+
+      {/* Mobile sidebar toggle */}
+      <button
+        className="mr-2 flex h-7 w-7 shrink-0 items-center justify-center rounded border-2 border-[#252535] text-[#444455] transition hover:border-[#FFE600] hover:text-[#FFE600] lg:hidden"
+        onClick={onToggleSidebar}
+        type="button"
+        aria-label="Toggle sidebar"
+      >
+        <Menu className="h-3.5 w-3.5" />
+      </button>
 
       {/* Brand */}
-      <Link className="flex w-[200px] items-center gap-2.5 shrink-0" href={tabs[0]?.href ?? "/login"}>
+      <Link className="flex w-[160px] shrink-0 items-center gap-2.5 lg:w-[200px]" href={tabs[0]?.href ?? "/login"}>
         <div className="flex h-6 w-6 items-center justify-center rounded bg-[#FFE600]">
           <Radio className="h-3.5 w-3.5 text-[#08080F]" />
         </div>
@@ -66,8 +76,8 @@ export default function DashboardTopbar() {
         </div>
       </Link>
 
-      {/* Tabs */}
-      <nav className="flex min-w-0 flex-1 items-center justify-center gap-0.5">
+      {/* Tabs — scrollable on mobile */}
+      <nav className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto scrollbar-none lg:justify-center">
         {tabs.map((tab) => {
           const active = pathname.startsWith(tab.href);
           return (
@@ -88,7 +98,7 @@ export default function DashboardTopbar() {
       </nav>
 
       {/* Right side */}
-      <div className="flex w-[200px] shrink-0 items-center justify-end gap-3">
+      <div className="flex w-auto shrink-0 items-center justify-end gap-3 lg:w-[200px]">
         <div className="hidden text-right sm:block">
           <div className={`text-[10px] font-black uppercase tracking-[0.08em] ${roleColor}`}>
             {user?.role ? roleShortLabel(user.role) : "Police"}

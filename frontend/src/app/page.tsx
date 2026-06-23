@@ -8,13 +8,13 @@ import {
   MapPinned,
   MessageSquareWarning,
   Navigation,
-  Radio,
   ShieldCheck,
   Siren,
   Users,
   Zap,
 } from "lucide-react";
 import Link from "next/link";
+import HomeNavbar from "@/components/HomeNavbar";
 
 export const metadata: Metadata = {
   title: "DRISHTI — AI Traffic Operations Platform | Bengaluru Police",
@@ -38,45 +38,7 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-[#08080F] text-[#F0F0F8] overflow-x-hidden">
 
-      {/* ── Navbar ──────────────────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 border-b-2 border-[#252535] bg-[#08080F]/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <Link className="flex items-center gap-3" href="/">
-            <div className="flex h-9 w-9 items-center justify-center rounded bg-[#FFE600]">
-              <Radio className="h-4 w-4 text-[#08080F]" />
-            </div>
-            <div>
-              <div className="font-mono text-[13px] font-bold tracking-[0.22em] text-[#FFE600]">DRISHTI</div>
-              <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#444455]">Bengaluru Police · Traffic Ops</div>
-            </div>
-          </Link>
-
-          <div className="flex items-center gap-1">
-            <Link className="px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-[#8888A0] transition hover:text-[#F0F0F8]" href="/citizen/grievance">
-              Report
-            </Link>
-            <Link className="px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-[#8888A0] transition hover:text-[#F0F0F8]" href="/citizen/track">
-              Track
-            </Link>
-            <Link className="px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.06em] text-[#8888A0] transition hover:text-[#F0F0F8]" href="/citizen/hotspots">
-              Hotspots
-            </Link>
-            <Link
-              className="ml-2 inline-flex items-center gap-1.5 rounded border-2 border-[#252535] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.08em] text-[#8888A0] transition hover:border-[#FFE600] hover:text-[#FFE600]"
-              href="/register"
-            >
-              Request Access
-            </Link>
-            <Link
-              className="ml-1 btn-primary text-[11px]"
-              href="/login"
-            >
-              Police Login
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <HomeNavbar />
 
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
       <section className="relative overflow-hidden border-b-2 border-[#252535] px-6 pb-24 pt-20">

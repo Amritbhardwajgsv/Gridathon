@@ -172,14 +172,11 @@ export default function HotspotsPage() {
         </p>
       </div>
 
-      {/* ── Body — concrete height so Mappls SDK gets a real pixel size ── */}
-      <div
-        className="mx-auto flex w-full max-w-7xl gap-5 px-6 pb-6"
-        style={{ height: "calc(100vh - 210px)" }}
-      >
+      {/* ── Body — stacks on mobile, side-by-side on desktop ── */}
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-3 pb-6 sm:px-6 lg:flex-row lg:h-[calc(100vh-210px)]">
 
-        {/* Map card */}
-        <div className="browser-card flex-1 overflow-hidden flex flex-col">
+        {/* Map card — fixed height on mobile so Mappls SDK gets real pixels */}
+        <div className="browser-card flex h-[55vw] min-h-[280px] max-h-[480px] flex-col overflow-hidden lg:h-auto lg:max-h-none lg:min-h-0 lg:flex-1">
           <div className="browser-card-header shrink-0">
             <span className="browser-dot browser-dot-red" />
             <span className="browser-dot browser-dot-yellow" />
@@ -205,8 +202,8 @@ export default function HotspotsPage() {
           )}
         </div>
 
-        {/* Sidebar — same height as body container */}
-        <div className="w-72 shrink-0 flex flex-col gap-3 overflow-hidden">
+        {/* Sidebar — full width on mobile, fixed 288px on desktop */}
+        <div className="flex w-full shrink-0 flex-col gap-3 overflow-hidden lg:w-72">
           <div className="browser-card flex-1 overflow-hidden flex flex-col">
             <div className="browser-card-header">
               <span className="browser-dot browser-dot-red" />
