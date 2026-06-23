@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
@@ -10,7 +11,7 @@ export default function OGImage() {
     (
       <div
         style={{
-          background: "#08080F",
+          background: "#fffaf6",
           width: "100%",
           height: "100%",
           display: "flex",
@@ -20,26 +21,28 @@ export default function OGImage() {
           position: "relative",
         }}
       >
-        {/* Grid overlay */}
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            backgroundImage:
-              "linear-gradient(rgba(255,230,0,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,230,0,0.04) 1px, transparent 1px)",
-            backgroundSize: "48px 48px",
-          }}
-        />
-
-        {/* Yellow accent bar */}
+        {/* Coral top bar */}
         <div
           style={{
             position: "absolute",
             top: 0,
             left: 0,
             right: 0,
-            height: "4px",
-            background: "#FFE600",
+            height: "5px",
+            background: "#f47f5f",
+            display: "flex",
+          }}
+        />
+
+        {/* Subtle dot pattern */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundImage: "radial-gradient(#f2d8ca 1.5px, transparent 1.5px)",
+            backgroundSize: "32px 32px",
+            opacity: 0.5,
+            display: "flex",
           }}
         />
 
@@ -49,7 +52,7 @@ export default function OGImage() {
             style={{
               width: "48px",
               height: "48px",
-              background: "#FFE600",
+              background: "#ffd62f",
               borderRadius: "8px",
               display: "flex",
               alignItems: "center",
@@ -58,18 +61,18 @@ export default function OGImage() {
           >
             <div
               style={{
-                width: "24px",
-                height: "24px",
-                border: "3px solid #08080F",
+                width: "22px",
+                height: "22px",
+                border: "3px solid #342018",
                 borderRadius: "50%",
-                borderTopColor: "transparent",
+                display: "flex",
               }}
             />
           </div>
           <div style={{ display: "flex", flexDirection: "column" }}>
             <span
               style={{
-                color: "#FFE600",
+                color: "#342018",
                 fontSize: "18px",
                 fontWeight: 900,
                 letterSpacing: "0.22em",
@@ -80,7 +83,7 @@ export default function OGImage() {
             </span>
             <span
               style={{
-                color: "#444455",
+                color: "#a88778",
                 fontSize: "11px",
                 fontWeight: 700,
                 letterSpacing: "0.14em",
@@ -98,20 +101,22 @@ export default function OGImage() {
               display: "flex",
               alignItems: "center",
               gap: "8px",
-              border: "2px solid rgba(255,230,0,0.3)",
+              border: "2px solid #f2d8ca",
               borderRadius: "999px",
-              padding: "6px 16px",
+              padding: "6px 18px",
+              background: "rgba(244,127,95,0.08)",
             }}
           >
             <div
               style={{
                 width: "8px",
                 height: "8px",
-                background: "#FFE600",
+                background: "#f47f5f",
                 borderRadius: "50%",
+                display: "flex",
               }}
             />
-            <span style={{ color: "#FFE600", fontSize: "11px", fontWeight: 700, letterSpacing: "0.18em" }}>
+            <span style={{ color: "#f47f5f", fontSize: "11px", fontWeight: 700, letterSpacing: "0.18em" }}>
               ACTIVE OPERATIONS
             </span>
           </div>
@@ -125,20 +130,21 @@ export default function OGImage() {
               fontWeight: 900,
               lineHeight: 0.95,
               letterSpacing: "-0.02em",
-              color: "#F0F0F8",
               textTransform: "uppercase",
+              display: "flex",
+              flexDirection: "column",
             }}
           >
-            <span style={{ display: "block" }}>AI sees</span>
-            <span style={{ display: "block", color: "#FFE600" }}>the signal.</span>
-            <span style={{ display: "block" }}>Teams move.</span>
+            <span style={{ color: "#342018", display: "flex" }}>AI sees</span>
+            <span style={{ color: "#f47f5f", display: "flex" }}>the signal.</span>
+            <span style={{ color: "#342018", display: "flex" }}>Teams move.</span>
           </div>
 
           <p
             style={{
               marginTop: "28px",
               fontSize: "20px",
-              color: "#8888A0",
+              color: "#795b4e",
               lineHeight: 1.6,
               maxWidth: "680px",
             }}
@@ -149,40 +155,23 @@ export default function OGImage() {
         </div>
 
         {/* Stats row */}
-        <div
-          style={{
-            marginTop: "auto",
-            display: "flex",
-            gap: "16px",
-            zIndex: 1,
-          }}
-        >
-          {[
-            { v: "NLP",  l: "Auto Extraction"    },
-            { v: "AI",   l: "Impact Prediction"  },
-            { v: "GPS",  l: "Officer Dispatch"   },
-            { v: "24/7", l: "Police Workflow"    },
-          ].map((s) => (
-            <div
-              key={s.l}
-              style={{
-                flex: 1,
-                border: "2px solid #252535",
-                borderRadius: "8px",
-                padding: "16px",
-                background: "#0F0F1A",
-                display: "flex",
-                flexDirection: "column",
-              }}
-            >
-              <span style={{ color: "#FFE600", fontSize: "28px", fontWeight: 900, fontFamily: "monospace" }}>
-                {s.v}
-              </span>
-              <span style={{ color: "#8888A0", fontSize: "12px", fontWeight: 700, letterSpacing: "0.06em", marginTop: "4px" }}>
-                {s.l}
-              </span>
-            </div>
-          ))}
+        <div style={{ marginTop: "auto", display: "flex", gap: "16px", zIndex: 1 }}>
+          <div style={{ flex: 1, border: "2px solid #f2d8ca", borderRadius: "8px", padding: "16px", background: "#fff0e8", display: "flex", flexDirection: "column" }}>
+            <span style={{ color: "#f47f5f", fontSize: "28px", fontWeight: 900 }}>NLP</span>
+            <span style={{ color: "#795b4e", fontSize: "12px", fontWeight: 700, letterSpacing: "0.06em", marginTop: "4px" }}>Auto Extraction</span>
+          </div>
+          <div style={{ flex: 1, border: "2px solid #f2d8ca", borderRadius: "8px", padding: "16px", background: "#fff0e8", display: "flex", flexDirection: "column" }}>
+            <span style={{ color: "#f47f5f", fontSize: "28px", fontWeight: 900 }}>AI</span>
+            <span style={{ color: "#795b4e", fontSize: "12px", fontWeight: 700, letterSpacing: "0.06em", marginTop: "4px" }}>Impact Prediction</span>
+          </div>
+          <div style={{ flex: 1, border: "2px solid #f2d8ca", borderRadius: "8px", padding: "16px", background: "#fff0e8", display: "flex", flexDirection: "column" }}>
+            <span style={{ color: "#f47f5f", fontSize: "28px", fontWeight: 900 }}>GPS</span>
+            <span style={{ color: "#795b4e", fontSize: "12px", fontWeight: 700, letterSpacing: "0.06em", marginTop: "4px" }}>Officer Dispatch</span>
+          </div>
+          <div style={{ flex: 1, border: "2px solid #f2d8ca", borderRadius: "8px", padding: "16px", background: "#fff0e8", display: "flex", flexDirection: "column" }}>
+            <span style={{ color: "#f47f5f", fontSize: "28px", fontWeight: 900 }}>24/7</span>
+            <span style={{ color: "#795b4e", fontSize: "12px", fontWeight: 700, letterSpacing: "0.06em", marginTop: "4px" }}>Police Workflow</span>
+          </div>
         </div>
 
         {/* URL watermark */}
@@ -191,7 +180,7 @@ export default function OGImage() {
             position: "absolute",
             bottom: "28px",
             right: "72px",
-            color: "#252535",
+            color: "#e8b9a1",
             fontSize: "13px",
             fontWeight: 700,
             letterSpacing: "0.08em",

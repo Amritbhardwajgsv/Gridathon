@@ -30,10 +30,6 @@ export const metadata: Metadata = {
     template: "%s | DRISHTI · BTP",
   },
   description: SITE_DESC,
-  manifest: "/manifest.webmanifest",
-  icons: {
-    apple: "/apple-touch-icon.png",
-  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -68,20 +64,11 @@ export const metadata: Metadata = {
     siteName: SITE_NAME,
     title: SITE_NAME,
     description: SITE_DESC,
-    images: [
-      {
-        url: "/opengraph-image",
-        width: 1200,
-        height: 630,
-        alt: "DRISHTI — Bengaluru Police AI Traffic Operations Platform",
-      },
-    ],
   },
   twitter: {
     card: "summary_large_image",
     title: SITE_NAME,
     description: SITE_DESC,
-    images: ["/opengraph-image"],
     creator: "@blr_traffic_pol",
   },
   alternates: {
